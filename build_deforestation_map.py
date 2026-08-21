@@ -35,14 +35,16 @@ NATIONAL_BY_YEAR = {
     2021: 14700, 2022: 16516, 2023: 25380, 2024: 20153, 2025: 23475,
 }
 
+# (English name, Romanian name, hectares) — bilingual so the RO/EN toggle can
+# relabel the driver list without a separate lookup table.
 DRIVERS = [
-    ("Logging", 458682),
-    ("Unknown", 5253),
-    ("Other natural disturbances", 3448),
-    ("Permanent agriculture", 3317),
-    ("Hard commodities", 2185),
-    ("Settlements & Infrastructure", 2143),
-    ("Wildfire", 1266),
+    ("Logging", "Exploatare forestieră", 458682),
+    ("Unknown", "Necunoscut", 5253),
+    ("Other natural disturbances", "Alte perturbări naturale", 3448),
+    ("Permanent agriculture", "Agricultură permanentă", 3317),
+    ("Hard commodities", "Materii prime", 2185),
+    ("Settlements & Infrastructure", "Așezări și infrastructură", 2143),
+    ("Wildfire", "Incendii de vegetație", 1266),
 ]
 
 # Sequential forest-green ramp (same L/C step schedule as the dataviz skill's
@@ -95,7 +97,7 @@ def main():
 
     total_national = sum(NATIONAL_BY_YEAR.values())
     recent5 = sum(v for y, v in NATIONAL_BY_YEAR.items() if y >= 2021)
-    logging_share = DRIVERS[0][1] / sum(d[1] for d in DRIVERS) * 100
+    logging_share = DRIVERS[0][2] / sum(d[2] for d in DRIVERS) * 100
 
     print(f"  -> total national loss 2001-2025: {total_national:,} ha", file=sys.stderr)
     print(f"  -> logging share of all loss: {logging_share:.1f}%", file=sys.stderr)
@@ -118,11 +120,11 @@ def main():
 
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
-<html lang="en">
+<html lang="ro">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Romania Deforestation Map — Tree Cover Loss 2001-2025</title>
+<title>Harta Defrișărilor din România — Pierdere pădure 2001-2025</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -213,8 +215,27 @@ body {
 .range-ends { display: flex; justify-content: space-between; margin-top: 2px; }
 .range-ends span { font-size: 12px; color: var(--text-muted); }
 
-#basemap-toggle {
+/* mode-row groups the RO/EN language pill with the Map/Satellite/Compare
+   toggle so both position as one unit (top right on desktop, a single full-
+   width row on mobile) instead of needing separate fixed offsets that would
+   have to be kept in sync by hand. */
+#mode-row {
   position: absolute; top: 12px; right: 12px; z-index: 1000;
+  display: flex; align-items: stretch; gap: 8px;
+}
+#lang-toggle {
+  flex-shrink: 0;
+  background: var(--surface-1); border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15); border: 1px solid var(--border);
+  display: flex; overflow: hidden; font-size: 13px; font-weight: 600;
+}
+#lang-toggle button {
+  border: none; background: transparent; padding: 11px 12px; cursor: pointer;
+  color: var(--text-secondary);
+}
+#lang-toggle button.active { background: var(--seq-500); color: white; }
+
+#basemap-toggle {
   background: var(--surface-1); border-radius: 10px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.15); border: 1px solid var(--border);
   display: flex; overflow: hidden; font-size: 13px; font-weight: 600;
@@ -339,7 +360,9 @@ body {
   .hstat { margin-top: 4px; }
   .hstat .v { font-size: 21px; }
   .hstat .l { font-size: 11px; }
-  #basemap-toggle { position: static; width: 100%; font-size: 12.5px; }
+  #mode-row { position: static; width: 100%; }
+  #lang-toggle { font-size: 12.5px; }
+  #basemap-toggle { flex: 1; font-size: 12.5px; }
   #basemap-toggle button { flex: 1; padding: 10px 6px; text-align: center; }
 
   /* Legend / compare-panel / year-panel stack as one bottom-anchored
@@ -377,46 +400,52 @@ body {
 
   <div id="top-overlay">
     <div id="header">
-      <h1>🌲 Romania Deforestation Map</h1>
-      <div class="sub">Tree cover loss by county, 2001–2024 · Hansen/UMD/Google/USGS/NASA data via Global Nature Watch</div>
-      <div class="hstat"><span class="v" id="hs-total"></span><span class="l">hectares of tree cover lost<br>nationwide, 2001–2025</span></div>
-      <div class="hstat"><span class="v" id="hs-logging"></span><span class="l">of all tracked loss is<br>attributed to logging</span></div>
+      <h1 data-i18n="title">🌲 Harta Defrișărilor din România</h1>
+      <div class="sub" data-i18n="subtitle">Pierdere de pădure pe județ, 2001–2024 · date Hansen/UMD/Google/USGS/NASA via Global Nature Watch</div>
+      <div class="hstat"><span class="v" id="hs-total"></span><span class="l" data-i18n="hstat_total">hectare de pădure pierdute<br>la nivel național, 2001–2025</span></div>
+      <div class="hstat"><span class="v" id="hs-logging"></span><span class="l" data-i18n="hstat_logging">din toată pierderea urmărită este<br>atribuită exploatării forestiere</span></div>
     </div>
 
-    <div id="basemap-toggle">
-      <button id="btn-osm" class="active">Map</button>
-      <button id="btn-sat">Satellite</button>
-      <button id="btn-cmp">Compare imagery</button>
+    <div id="mode-row">
+      <div id="lang-toggle">
+        <button type="button" class="lang-btn active" data-lang="ro">RO</button>
+        <button type="button" class="lang-btn" data-lang="en">EN</button>
+      </div>
+      <div id="basemap-toggle">
+        <button id="btn-osm" class="active" data-i18n="btn_map">Hartă</button>
+        <button id="btn-sat" data-i18n="btn_sat">Satelit</button>
+        <button id="btn-cmp" data-i18n="btn_cmp">Compară imagini</button>
+      </div>
     </div>
   </div>
 
   <div class="swipe-divider" id="swipe-divider"><div class="swipe-handle">⇔</div></div>
-  <div class="swipe-label" id="swipe-label-before">BEFORE</div>
-  <div class="swipe-label" id="swipe-label-after">AFTER</div>
+  <div class="swipe-label" id="swipe-label-before" data-i18n="swipe_before">ÎNAINTE</div>
+  <div class="swipe-label" id="swipe-label-after" data-i18n="swipe_after">DUPĂ</div>
 
   <div id="bottom-overlay">
     <div id="legend">
-      <div class="title">Tree cover lost (ha, selected years)</div>
+      <div class="title" data-i18n="legend_title">Pădure pierdută (ha, ani selectați)</div>
       <div class="ramp" id="legend-ramp"></div>
-      <div class="scale-labels"><span>0</span><span id="legend-max">high</span></div>
+      <div class="scale-labels"><span>0</span><span id="legend-max"></span></div>
     </div>
 
     <div id="compare-panel">
-      <div class="title">Real satellite imagery</div>
+      <div class="title" data-i18n="cmp_title">Imagini satelitare reale</div>
       <div class="cmp-row">
-        <label><span class="cmp-swatch" style="background:#898781"></span>Before</label>
+        <label><span class="cmp-swatch" style="background:#898781"></span><span data-i18n="cmp_before">Înainte</span></label>
         <select id="cmp-before"></select>
       </div>
       <div class="cmp-row">
-        <label><span class="cmp-swatch" style="background:#196116"></span>After</label>
+        <label><span class="cmp-swatch" style="background:#196116"></span><span data-i18n="cmp_after">După</span></label>
         <select id="cmp-after"></select>
       </div>
-      <div class="cmp-note">Drag the white divider on the map to reveal before/after. Sentinel-2 cloudless annual mosaics, EOX IT Services — real photos, not modeled data. Pan/zoom to any county (try Suceava or Harghita, the top two by loss).</div>
+      <div class="cmp-note" data-i18n="cmp_note">Trage divizorul alb de pe hartă pentru a compara înainte/după. Mozaicuri anuale Sentinel-2 cloudless, EOX IT Services — fotografii reale, nu date modelate. Navighează spre orice județ (încearcă Suceava sau Harghita, primele două ca pierdere).</div>
     </div>
 
     <div id="year-panel">
       <div class="row">
-        <label>Years</label>
+        <label data-i18n="label_years">Ani</label>
         <div class="range-wrap">
           <div class="range-track-bg"></div>
           <div class="range-track-fill" id="range-fill"></div>
@@ -433,36 +462,36 @@ body {
 
 <div id="sidebar">
   <div>
-    <div class="sec-label">Highest cumulative loss</div>
-    <div class="sec-sub">Counties ranked by tree cover lost in the selected year range. Click a bar or a county on the map for its yearly detail.</div>
+    <div class="sec-label" data-i18n="sec_ranking_label">Cea mai mare pierdere cumulată</div>
+    <div class="sec-sub" data-i18n="sec_ranking_sub">Județe clasate după pădurea pierdută în intervalul de ani selectat. Apasă pe o bară sau pe un județ de pe hartă pentru detalii anuale.</div>
     <div id="ranking"></div>
   </div>
 
   <div>
-    <div class="sec-label">Why the forest is disappearing</div>
-    <div class="sec-sub">Cause of tree cover loss nationwide, 2001–2024, by dominant driver (Hansen/WRI classification).</div>
+    <div class="sec-label" data-i18n="sec_drivers_label">De ce dispare pădurea</div>
+    <div class="sec-sub" data-i18n="sec_drivers_sub">Cauza pierderii de pădure la nivel național, 2001–2024, pe principalul factor (clasificare Hansen/WRI).</div>
     <div id="drivers"></div>
   </div>
 
   <div>
-    <div class="sec-label">National trend</div>
-    <div class="sec-sub">Total hectares of tree cover lost per year, all counties. Includes 2025 nationally; the county map and ranking above cover 2001–2024 (latest year with a per-county breakdown available).</div>
+    <div class="sec-label" data-i18n="sec_trend_label">Tendință națională</div>
+    <div class="sec-sub" data-i18n="sec_trend_sub">Total hectare de pădure pierdute pe an, toate județele. Include 2025 la nivel național; harta și clasamentul de mai sus acoperă 2001–2024 (ultimul an cu detaliere pe județ disponibilă).</div>
     <svg class="trend-svg" id="national-trend"></svg>
   </div>
 
   <div>
-    <div class="sec-label">See the actual satellite imagery</div>
-    <div class="sec-sub">The county colors above are <i>data</i> — where and how much forest disappeared, not a photo. For real before/after photos in this same map, click <b>"Compare imagery"</b> at the top right and drag the divider. Or explore externally:</div>
-    <a class="explore-link" id="link-eobrowser" href="#" target="_blank" rel="noopener">↗ Open Romania in Copernicus Browser (Sentinel-2, pick any two dates)</a>
-    <a class="explore-link" id="link-gfw" href="#" target="_blank" rel="noopener">↗ Open Romania on Global Forest Watch</a>
+    <div class="sec-label" data-i18n="sec_imagery_label">Vezi imaginile satelitare reale</div>
+    <div class="sec-sub" data-i18n="sec_imagery_sub">Culorile județelor de mai sus sunt <i>date</i> — unde și cât de multă pădure a dispărut, nu o fotografie. Pentru fotografii reale înainte/după chiar în această hartă, apasă pe <b>„Compară imagini”</b> în dreapta sus și trage divizorul. Sau explorează extern:</div>
+    <a class="explore-link" id="link-eobrowser" href="#" target="_blank" rel="noopener" data-i18n="link_eobrowser">↗ Deschide România în Copernicus Browser (Sentinel-2, alege oricare două date)</a>
+    <a class="explore-link" id="link-gfw" href="#" target="_blank" rel="noopener" data-i18n="link_gfw">↗ Deschide România pe Global Forest Watch</a>
   </div>
 
-  <div class="source-note">
-    Tree cover loss: Hansen/UMD/Google/USGS/NASA Global Forest Change, ≥30% canopy density threshold, via the public
-    <a href="https://globalnaturewatch.org" target="_blank">Global Nature Watch</a> data API (formerly Global Forest Watch), CC BY 4.0.
-    Loss driver classification: WRI/Google. County boundaries: GADM v3.6.
-    Compare-imagery photos: Sentinel-2 cloudless annual mosaics by <a href="https://s2maps.eu" target="_blank">EOX IT Services GmbH</a>, contains modified Copernicus Sentinel data, CC BY-SA 4.0.
-    Data fetched 2026-08-20 — GNW updates annually; figures may since have shifted slightly.
+  <div class="source-note" data-i18n="source_note">
+    Pierdere de pădure: Hansen/UMD/Google/USGS/NASA Global Forest Change, prag ≥30% densitate coronament, via API-ul public
+    <a href="https://globalnaturewatch.org" target="_blank">Global Nature Watch</a> (fostul Global Forest Watch), CC BY 4.0.
+    Clasificarea factorilor de pierdere: WRI/Google. Granițe județene: GADM v3.6.
+    Fotografii Compară imagini: mozaicuri anuale Sentinel-2 cloudless de <a href="https://s2maps.eu" target="_blank">EOX IT Services GmbH</a>, conțin date Copernicus Sentinel modificate, CC BY-SA 4.0.
+    Date preluate la 20.08.2026 — GNW actualizează anual; cifrele se pot modifica ușor.
   </div>
 </div>
 
@@ -473,9 +502,101 @@ const NATIONAL = __NATIONAL__;
 const DRIVERS = __DRIVERS__;
 const SEQ_RAMP = __SEQ_RAMP__;
 const CAT_COLORS = __CAT_COLORS__;
+const TOTAL_NATIONAL = __TOTAL_NATIONAL__;
+const LOGGING_SHARE = '__LOGGING_SHARE__';
 
-document.getElementById('hs-total').textContent = (__TOTAL_NATIONAL__).toLocaleString('en-US');
-document.getElementById('hs-logging').textContent = '__LOGGING_SHARE__%';
+// ---- I18N ----
+let currentLang = 'ro';
+function numLocale() { return currentLang === 'en' ? 'en-US' : 'ro-RO'; }
+const translations = {
+  ro: {
+    title: '🌲 Harta Defrișărilor din România',
+    subtitle: 'Pierdere de pădure pe județ, 2001–2024 · date Hansen/UMD/Google/USGS/NASA via Global Nature Watch',
+    hstat_total: 'hectare de pădure pierdute<br>la nivel național, 2001–2025',
+    hstat_logging: 'din toată pierderea urmărită este<br>atribuită exploatării forestiere',
+    btn_map: 'Hartă',
+    btn_sat: 'Satelit',
+    btn_cmp: 'Compară imagini',
+    legend_title: 'Pădure pierdută (ha, ani selectați)',
+    cmp_title: 'Imagini satelitare reale',
+    cmp_before: 'Înainte',
+    cmp_after: 'După',
+    cmp_note: 'Trage divizorul alb de pe hartă pentru a compara înainte/după. Mozaicuri anuale Sentinel-2 cloudless, EOX IT Services — fotografii reale, nu date modelate. Navighează spre orice județ (încearcă Suceava sau Harghita, primele două ca pierdere).',
+    swipe_before: 'ÎNAINTE',
+    swipe_after: 'DUPĂ',
+    label_years: 'Ani',
+    sec_ranking_label: 'Cea mai mare pierdere cumulată',
+    sec_ranking_sub: 'Județe clasate după pădurea pierdută în intervalul de ani selectat. Apasă pe o bară sau pe un județ de pe hartă pentru detalii anuale.',
+    sec_drivers_label: 'De ce dispare pădurea',
+    sec_drivers_sub: 'Cauza pierderii de pădure la nivel național, 2001–2024, pe principalul factor (clasificare Hansen/WRI).',
+    sec_trend_label: 'Tendință națională',
+    sec_trend_sub: 'Total hectare de pădure pierdute pe an, toate județele. Include 2025 la nivel național; harta și clasamentul de mai sus acoperă 2001–2024 (ultimul an cu detaliere pe județ disponibilă).',
+    sec_imagery_label: 'Vezi imaginile satelitare reale',
+    sec_imagery_sub: 'Culorile județelor de mai sus sunt <i>date</i> — unde și cât de multă pădure a dispărut, nu o fotografie. Pentru fotografii reale înainte/după chiar în această hartă, apasă pe <b>„Compară imagini”</b> în dreapta sus și trage divizorul. Sau explorează extern:',
+    link_eobrowser: '↗ Deschide România în Copernicus Browser (Sentinel-2, alege oricare două date)',
+    link_gfw: '↗ Deschide România pe Global Forest Watch',
+    source_note: 'Pierdere de pădure: Hansen/UMD/Google/USGS/NASA Global Forest Change, prag ≥30% densitate coronament, via API-ul public ' +
+      '<a href="https://globalnaturewatch.org" target="_blank">Global Nature Watch</a> (fostul Global Forest Watch), CC BY 4.0. ' +
+      'Clasificarea factorilor de pierdere: WRI/Google. Granițe județene: GADM v3.6. ' +
+      'Fotografii Compară imagini: mozaicuri anuale Sentinel-2 cloudless de <a href="https://s2maps.eu" target="_blank">EOX IT Services GmbH</a>, conțin date Copernicus Sentinel modificate, CC BY-SA 4.0. ' +
+      'Date preluate la 20.08.2026 — GNW actualizează anual; cifrele se pot modifica ușor.',
+    popup_lost: 'pierdut(e), ',
+    popup_rank_prefix: 'Locul ',
+    popup_rank_of: ' din 42 de județe',
+    popup_view_imagery: '↗ vezi imaginile satelitare reale aici',
+  },
+  en: {
+    title: '🌲 Romania Deforestation Map',
+    subtitle: 'Tree cover loss by county, 2001–2024 · Hansen/UMD/Google/USGS/NASA data via Global Nature Watch',
+    hstat_total: 'hectares of forest lost<br>nationally, 2001–2025',
+    hstat_logging: 'of all tracked loss is<br>attributed to logging',
+    btn_map: 'Map',
+    btn_sat: 'Satellite',
+    btn_cmp: 'Compare imagery',
+    legend_title: 'Forest lost (ha, selected years)',
+    cmp_title: 'Real satellite imagery',
+    cmp_before: 'Before',
+    cmp_after: 'After',
+    cmp_note: 'Drag the white divider on the map to compare before/after. Sentinel-2 cloudless annual mosaics, EOX IT Services — real photography, not modeled data. Pan to any county (try Suceava or Harghita, the top two by loss).',
+    swipe_before: 'BEFORE',
+    swipe_after: 'AFTER',
+    label_years: 'Years',
+    sec_ranking_label: 'Highest cumulative loss',
+    sec_ranking_sub: 'Counties ranked by tree cover lost in the selected year range. Click a bar or a county on the map for its yearly detail.',
+    sec_drivers_label: 'Why the forest is disappearing',
+    sec_drivers_sub: 'Cause of tree cover loss nationwide, 2001–2024, by dominant driver (Hansen/WRI classification).',
+    sec_trend_label: 'National trend',
+    sec_trend_sub: 'Total hectares of tree cover lost per year, all counties. Includes 2025 nationally; the county map and ranking above cover 2001–2024 (latest year with a per-county breakdown available).',
+    sec_imagery_label: 'See the actual satellite imagery',
+    sec_imagery_sub: 'The county colors above are <i>data</i> — where and how much forest disappeared, not a photo. For real before/after photos in this same map, click <b>"Compare imagery"</b> at the top right and drag the divider. Or explore externally:',
+    link_eobrowser: '↗ Open Romania in Copernicus Browser (Sentinel-2, pick any two dates)',
+    link_gfw: '↗ Open Romania on Global Forest Watch',
+    source_note: 'Tree cover loss: Hansen/UMD/Google/USGS/NASA Global Forest Change, ≥30% canopy density threshold, via the public ' +
+      '<a href="https://globalnaturewatch.org" target="_blank">Global Nature Watch</a> data API (formerly Global Forest Watch), CC BY 4.0. ' +
+      'Loss driver classification: WRI/Google. County boundaries: GADM v3.6. ' +
+      'Compare-imagery photos: Sentinel-2 cloudless annual mosaics by <a href="https://s2maps.eu" target="_blank">EOX IT Services GmbH</a>, contains modified Copernicus Sentinel data, CC BY-SA 4.0. ' +
+      'Data fetched 2026-08-20 — GNW updates annually; figures may since have shifted slightly.',
+    popup_lost: 'lost, ',
+    popup_rank_prefix: 'Rank ',
+    popup_rank_of: ' of 42 counties',
+    popup_view_imagery: '↗ view real satellite imagery here',
+  },
+};
+function t(key) { return translations[currentLang][key]; }
+function applyStaticTranslations() {
+  document.documentElement.lang = currentLang;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    if (val === undefined) return;
+    if (val.indexOf('<') !== -1) { el.innerHTML = val; } else { el.textContent = val; }
+  });
+}
+
+function renderHeaderStats() {
+  document.getElementById('hs-total').textContent = TOTAL_NATIONAL.toLocaleString(numLocale());
+  document.getElementById('hs-logging').textContent = LOGGING_SHARE + '%';
+}
 
 // ---- MAP SETUP ----
 const map = L.map('map', { preferCanvas: true }).setView([45.94, 24.97], 7);
@@ -617,7 +738,7 @@ function render() {
   const values = COUNTIES.features.map(f => sumRange(f.properties.years, state.y0, state.y1));
   const maxValue = Math.max(...values, 1);
 
-  document.getElementById('legend-max').textContent = Math.round(maxValue).toLocaleString('en-US') + ' ha';
+  document.getElementById('legend-max').textContent = Math.round(maxValue).toLocaleString(numLocale()) + ' ha';
   document.getElementById('legend-ramp').innerHTML = SEQ_RAMP.map(c => `<div style="background:${c}"></div>`).join('');
 
   const countyStyle = f => {
@@ -663,9 +784,9 @@ function showPopup(f, layer) {
   const rank = rankOf(f.properties.adm1);
   layer.bindPopup(
     `<b>${f.properties.name}</b>` +
-    `<span class="popup-total">${Math.round(v).toLocaleString('en-US')} ha</span> lost, ${state.y0}–${state.y1}<br>` +
-    `Rank ${rank} of 42 counties<br>` +
-    `<a href="#" onclick="window.open('https://browser.dataspace.copernicus.eu/?zoom=10&lat=' + ${layer.getBounds().getCenter().lat} + '&lng=' + ${layer.getBounds().getCenter().lng}, '_blank'); return false;">↗ view real satellite imagery here</a>`
+    `<span class="popup-total">${Math.round(v).toLocaleString(numLocale())} ha</span> ${t('popup_lost')}${state.y0}–${state.y1}<br>` +
+    `${t('popup_rank_prefix')}${rank}${t('popup_rank_of')}<br>` +
+    `<a href="#" onclick="window.open('https://browser.dataspace.copernicus.eu/?zoom=10&lat=' + ${layer.getBounds().getCenter().lat} + '&lng=' + ${layer.getBounds().getCenter().lng}, '_blank'); return false;">${t('popup_view_imagery')}</a>`
   ).openPopup();
 }
 
@@ -684,7 +805,7 @@ function renderRanking(values) {
     <div class="rank-row" data-adm1="${r.adm1}">
       <span class="rank-name">${r.name}</span>
       <div class="rank-bar-wrap"><div class="rank-bar" style="width:${(r.v/maxV*100).toFixed(1)}%"></div></div>
-      <span class="rank-val">${Math.round(r.v).toLocaleString('en-US')}</span>
+      <span class="rank-val">${Math.round(r.v).toLocaleString(numLocale())}</span>
     </div>
   `).join('');
   document.querySelectorAll('.rank-row').forEach(el => {
@@ -707,12 +828,13 @@ function renderDrivers() {
   // six causes (96%+ of all tracked loss) that a bar scaled to the largest
   // category made every other row's bar disappear to a sliver. A share-of-
   // total number reads correctly at any skew.
-  const total = DRIVERS.reduce((s, d) => s + d[1], 0);
+  const total = DRIVERS.reduce((s, d) => s + d[2], 0);
+  const nameIdx = currentLang === 'ro' ? 1 : 0;
   document.getElementById('drivers').innerHTML = DRIVERS.map((d, i) => `
     <div class="driver-row">
       <span class="driver-chip" style="background:${CAT_COLORS[i % CAT_COLORS.length]}"></span>
-      <span class="driver-name">${d[0]}</span>
-      <span class="driver-val">${(d[1] / total * 100).toFixed(1)}%</span>
+      <span class="driver-name">${d[nameIdx]}</span>
+      <span class="driver-val">${(d[2] / total * 100).toLocaleString(numLocale(), {minimumFractionDigits:1,maximumFractionDigits:1})}%</span>
     </div>
   `).join('');
 }
@@ -786,7 +908,23 @@ updateYears();
 document.getElementById('link-eobrowser').href = 'https://browser.dataspace.copernicus.eu/?zoom=7&lat=45.94&lng=24.97';
 document.getElementById('link-gfw').href = 'https://globalnaturewatch.org/map/country/ROU/';
 
+// ---- LANGUAGE TOGGLE ----
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const lang = btn.dataset.lang;
+    if (lang === currentLang) return;
+    currentLang = lang;
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+    applyStaticTranslations();
+    renderHeaderStats();
+    renderDrivers();
+    render();
+  });
+});
+
 // ---- INIT ----
+applyStaticTranslations();
+renderHeaderStats();
 renderDrivers();
 setMode('map');
 render();
