@@ -1,62 +1,67 @@
-Romania Deforestation Map — package contents
-==============================================
+# Harta defrișărilor din România
 
-romania_deforestation_map.html
-  The finished map. Open this file directly in any browser (double-click it,
-  or drag it into a browser window). No installation or server needed —
-  it's fully self-contained and pulls its map tiles and satellite imagery
-  live from the internet when opened. Mobile-friendly: the layout adapts to
-  phone-width screens automatically.
+Interactive map of tree cover loss across Romania's 42 counties (județe), 2001–2025 —
+inspired by [Global Forest Watch](https://globalforestwatch.org) and by the well-documented
+illegal logging in Romania's Carpathian old-growth forests, wanting a version that also
+lets you see the actual satellite imagery, not just the data.
 
-  Three view modes (top of the map — stacked on mobile, top right on
-  desktop):
-    - Map          County-by-county tree cover loss, color-coded (forest
-                   green) by total hectares lost in the selected year
-                   range. Drag the "Years" slider to change the range.
-                   Click a county (or a bar in the ranking panel) to see
-                   its year-by-year breakdown.
-    - Satellite     Same choropleth overlay, on a satellite basemap instead
-                   of the street map.
-    - Compare imagery   Real before/after satellite photos (Sentinel-2,
-                   2016-2025) for the same area, with a drag-to-reveal
-                   divider. Pick the "Before" and "After" years from the
-                   dropdowns, pan/zoom to any county, and drag the white
-                   divider left/right to compare. County boundaries are
-                   drawn on both sides of the divider so you can orient
-                   yourself.
+🔗 **[Live map](https://dana-juncu.github.io/ro-deforestation-map/romania_deforestation_map.html)**
 
-  The sidebar's "Why the forest is disappearing" section shows each cause
-  as a percentage of total tracked loss (not a bar) — logging is such a
-  dominant cause (96%+) that bars scaled to it made every other cause's
-  bar invisible.
+## What's in the map
 
-build_deforestation_map.py
-  The Python script that generates romania_deforestation_map.html from the
-  two data files below. Re-run it any time the underlying data is updated:
+- **Choropleth by județ** — total tree cover lost, color-coded, for any year range you
+  pick with the slider (2001–2024)
+- **Three view modes** — street map, satellite basemap, and **Compare imagery**: real
+  Sentinel-2 photos with a drag-to-reveal before/after divider (2016–2025), so you can
+  see forest actually disappear between two chosen years, not just a colored overlay
+- **County ranking** — top 10 counties by loss in the selected range, click-through to
+  a year-by-year popup for any county
+- **Why the forest is disappearing** — national loss broken down by cause (logging,
+  agriculture, wildfire, etc.), as a share of total
+- **National trend** — total hectares lost per year, 2001–2025
+- Mobile-friendly layout
 
-    python3 build_deforestation_map.py \
-      --geojson romania-counties-simplified.geojson \
-      --csv gfw_romania_county_loss.csv \
-      --out romania_deforestation_map.html
+Single self-contained `romania_deforestation_map.html` — Leaflet loaded from CDN, all
+county boundary and loss data embedded inline, no build step or server required to view
+it. `build_deforestation_map.py` regenerates that file from the two data files below,
+if the source data is ever refreshed.
 
-gfw_romania_county_loss.csv
-  Tree cover loss by Romanian county (județ) and year, 2001-2024, in
-  hectares. Sourced from the Hansen/UMD/Google/USGS/NASA Global Forest
-  Change dataset (>=30% canopy density threshold) via the public Global
-  Nature Watch (formerly Global Forest Watch) data API. County IDs (adm1)
-  match the ID_1 field in the GeoJSON file.
+## Data sources
 
-romania-counties-simplified.geojson
-  Romania's 42 county boundaries (GADM v3.6, admin level 1), simplified
-  for fast loading in the browser.
+- **Global Nature Watch** (formerly Global Forest Watch) — Hansen/UMD/Google/USGS/NASA
+  Global Forest Change dataset, ≥30% canopy density threshold: county-level and
+  national tree cover loss by year, plus loss-driver classification (WRI/Google), via
+  their public data API.
+- **GADM v3.6** — county (admin-1) boundaries.
+- **EOX IT Services GmbH** — Sentinel-2 cloudless annual mosaics, 2016–2025, the real
+  satellite photography behind Compare-imagery mode. CC BY-SA 4.0.
 
-Data sources & credit
-  - Tree cover loss: Hansen/UMD/Google/USGS/NASA Global Forest Change,
-    via Global Nature Watch (globalnaturewatch.org), CC BY 4.0.
-  - Loss driver classification: WRI/Google.
-  - County boundaries: GADM v3.6.
-  - Compare-imagery photos: Sentinel-2 cloudless annual mosaics by EOX IT
-    Services GmbH (contains modified Copernicus Sentinel data), CC BY-SA 4.0.
+## Data files
 
-Data fetched 2026-08-20. Global Nature Watch updates its loss figures
-annually, so exact numbers may shift slightly in future years.
+| File | Contents |
+|---|---|
+| `gfw_romania_county_loss.csv` | Tree cover loss by county (județ) and year, 2001–2024, in hectares |
+| `romania-counties-simplified.geojson` | Romania's 42 county boundaries (GADM v3.6), simplified for fast loading |
+| `build_deforestation_map.py` | Python script that regenerates the HTML map from the two files above |
+
+## Known limitations
+
+- County-level, not pixel-level — the choropleth shows which counties lost the most,
+  not exactly where within them (Compare-imagery mode lets you inspect any specific
+  area visually instead).
+- "Tree cover loss" isn't the same as permanent deforestation — the Hansen dataset
+  flags any loss above the canopy-density threshold, including legal harvest cycles in
+  managed forest, not only permanent land-use conversion.
+- The loss-driver breakdown (why the forest is disappearing) is national-only in the
+  source data — it can't be joined to the choropleth by county.
+- Compare-imagery mode uses annual cloud-free mosaics, not same-day photos — seasonal
+  or lighting differences between the two chosen years can look like change even where
+  none occurred.
+- 2025 is included in the national trend chart but not yet broken out by county —
+  2024 is the latest year with a full per-county breakdown in the source data.
+
+## License
+
+Code: MIT. Data: subject to the terms of the original sources (Global Nature
+Watch / Hansen-UMD-Google-USGS-NASA, GADM, EOX IT Services) — this repo just
+aggregates and republishes what they've already made public.
