@@ -19,6 +19,8 @@ lets you see the actual satellite imagery, not just the data.
 - **Why the forest is disappearing** — national loss broken down by cause (logging,
   agriculture, wildfire, etc.), as a share of total
 - **National trend** — total hectares lost per year, 2001–2025
+- **RO / EN language toggle** — every label, popup, and number switches language and locale
+  formatting (Romanian uses `.` as the thousands separator, English uses `,`)
 - Mobile-friendly layout
 
 Single self-contained `romania_deforestation_map.html` — Leaflet loaded from CDN, all
