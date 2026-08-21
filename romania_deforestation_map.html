@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Romania Deforestation Map — Tree Cover Loss 2001-2025</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --surface-1:      #fcfcfb;
+  --page-plane:     #f9f9f7;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --gridline:       #e1e0d9;
+  --baseline:       #c3c2b7;
+  --border:         rgba(11,11,11,0.10);
+  --seq-100: #d1e7ce; --seq-200: #a4cfa0; --seq-300: #77b671; --seq-400: #429e3d;
+  --seq-500: #297f25; --seq-600: #196116; --seq-700: #0c440a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page-plane); color: var(--text-primary);
+  display: flex; height: 100dvh; overflow: hidden;
+}
+#map-container { flex: 1; position: relative; min-width: 0; }
+#map { height: 100%; }
+/* map2: the "after" photo in Compare-imagery mode, a second Leaflet map stacked
+   exactly over #map in a plain (untransformed) wrapper div, so clip-path on THIS
+   div — not on a Leaflet-internal pane — correctly reveals it right of the divider. */
+#map2 {
+  position: absolute; inset: 0; z-index: 500;
+  pointer-events: none; display: none;
+  clip-path: inset(0 0 0 50%);
+}
+#map2.visible { display: block; }
+
+#top-overlay { display: contents; }
+#bottom-overlay { display: contents; }
+
+#header {
+  position: absolute; top: 12px; left: 12px; z-index: 1000;
+  background: var(--surface-1); border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  padding: 16px 18px; width: 310px; max-height: calc(100% - 24px);
+  overflow-y: auto; border: 1px solid var(--border);
+}
+#header h1 { font-size: 18px; font-weight: 700; }
+#header .sub { font-size: 14px; color: var(--text-secondary); margin-top: 4px; line-height: 1.4; }
+.hstat { display: flex; align-items: baseline; gap: 7px; margin-top: 11px; }
+.hstat .v { font-size: 27px; font-weight: 800; color: var(--seq-600); line-height: 1; }
+.hstat .l { font-size: 13px; color: var(--text-secondary); line-height: 1.3; }
+
+#year-panel {
+  position: absolute; bottom: 12px; left: 12px; right: 12px; z-index: 1000;
+  background: var(--surface-1); border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  padding: 12px 16px; border: 1px solid var(--border);
+}
+#year-panel .row { display: flex; align-items: center; gap: 10px; }
+#year-panel label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); white-space: nowrap; }
+#year-label { font-size: 15px; font-weight: 700; color: var(--seq-600); white-space: nowrap; min-width: 128px; text-align: right; }
+#year-chart { height: 44px; margin-top: 8px; }
+
+/* Dual-handle range slider: two native inputs overlaid on one shared track,
+   so it reads as ONE "from year -> to year" control, not two separate sliders. */
+.range-wrap { position: relative; flex: 1; height: 24px; }
+.range-track-bg, .range-track-fill {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  height: 4px; border-radius: 2px; pointer-events: none;
+}
+.range-track-bg { left: 0; right: 0; background: var(--gridline); }
+.range-track-fill { background: var(--seq-500); }
+.range-wrap input[type=range] {
+  position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 24px;
+  margin: 0; background: transparent; -webkit-appearance: none; appearance: none;
+  pointer-events: none; /* only the thumb (re-enabled below) is clickable */
+}
+.range-wrap input[type=range]::-webkit-slider-runnable-track { background: transparent; height: 4px; }
+.range-wrap input[type=range]::-moz-range-track { background: transparent; height: 4px; border: none; }
+.range-wrap input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; pointer-events: auto; cursor: pointer;
+  width: 22px; height: 22px; border-radius: 50%; margin-top: -9px;
+  background: var(--seq-600); border: 2px solid var(--surface-1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+}
+.range-wrap input[type=range]::-moz-range-thumb {
+  pointer-events: auto; cursor: pointer; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--seq-600); border: 2px solid var(--surface-1); box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+}
+.range-ends { display: flex; justify-content: space-between; margin-top: 2px; }
+.range-ends span { font-size: 12px; color: var(--text-muted); }
+
+#basemap-toggle {
+  position: absolute; top: 12px; right: 12px; z-index: 1000;
+  background: var(--surface-1); border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15); border: 1px solid var(--border);
+  display: flex; overflow: hidden; font-size: 13px; font-weight: 600;
+}
+#basemap-toggle button {
+  border: none; background: transparent; padding: 11px 14px; cursor: pointer;
+  color: var(--text-secondary);
+}
+#basemap-toggle button.active { background: var(--seq-500); color: white; }
+
+#legend {
+  position: absolute; top: 64px; right: 12px; z-index: 1000;
+  background: var(--surface-1); border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15); border: 1px solid var(--border);
+  padding: 11px 13px; font-size: 13px; color: var(--text-secondary);
+}
+#legend .title { font-weight: 700; color: var(--text-primary); margin-bottom: 7px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+#legend .ramp { display: flex; height: 12px; border-radius: 3px; overflow: hidden; width: 210px; }
+#legend .ramp div { flex: 1; }
+#legend .scale-labels { display: flex; justify-content: space-between; margin-top: 4px; }
+
+#compare-panel {
+  position: absolute; top: 64px; right: 12px; z-index: 1000;
+  background: var(--surface-1); border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15); border: 1px solid var(--border);
+  padding: 11px 13px; font-size: 13px; color: var(--text-secondary);
+  display: none; width: 250px;
+}
+#compare-panel.visible { display: block; }
+#compare-panel .title { font-weight: 700; color: var(--text-primary); margin-bottom: 9px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+.cmp-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+.cmp-row label { font-size: 13px; color: var(--text-secondary); flex-shrink: 0; }
+.cmp-row select {
+  font-size: 13px; font-weight: 700; color: var(--text-primary); background: var(--page-plane);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; cursor: pointer;
+}
+.cmp-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+#compare-panel .cmp-note { font-size: 12px; color: var(--text-muted); line-height: 1.4; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--gridline); }
+
+.swipe-divider {
+  position: absolute; top: 0; bottom: 0; width: 0; z-index: 999;
+  border-left: 2px solid #ffffff; box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+  cursor: ew-resize; display: none;
+}
+.swipe-divider.visible { display: block; }
+.swipe-handle {
+  position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%);
+  width: 40px; height: 40px; border-radius: 50%; background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center;
+  font-size: 16px; color: var(--seq-600); user-select: none;
+}
+.swipe-label {
+  position: absolute; top: 12px; z-index: 999; background: rgba(11,11,11,0.65); color: #fff;
+  font-size: 13px; font-weight: 700; padding: 5px 11px; border-radius: 6px; display: none; pointer-events: none;
+}
+.swipe-label.visible { display: block; }
+#swipe-label-before { left: 12px; }
+#swipe-label-after { right: 12px; }
+
+#sidebar {
+  width: 340px; flex-shrink: 0; background: var(--surface-1);
+  border-left: 1px solid var(--gridline); overflow-y: auto;
+  padding: 20px 18px; display: flex; flex-direction: column; gap: 20px;
+}
+.sec-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 9px; }
+.sec-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 11px; }
+
+.rank-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+.rank-row:hover .rank-name { color: var(--seq-600); }
+.rank-name { font-size: 13px; color: var(--text-primary); width: 100px; flex-shrink: 0; }
+.rank-bar-wrap { flex: 1; height: 13px; background: var(--gridline); border-radius: 3px; overflow: hidden; }
+.rank-bar { height: 100%; background: var(--seq-500); border-radius: 3px; }
+.rank-val { font-size: 12px; color: var(--text-secondary); width: 62px; text-align: right; flex-shrink: 0; }
+
+.driver-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.driver-chip { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+.driver-name { font-size: 13px; color: var(--text-primary); flex: 1; }
+.driver-val { font-size: 14px; font-weight: 700; color: var(--text-primary); width: 52px; text-align: right; flex-shrink: 0; }
+
+.trend-svg { width: 100%; height: 90px; }
+.trend-svg path.line { fill: none; stroke: var(--seq-500); stroke-width: 2; }
+.trend-svg path.area { fill: var(--seq-100); opacity: 0.6; }
+.trend-svg line.grid { stroke: var(--gridline); stroke-width: 1; }
+.trend-svg text.tick { fill: var(--text-muted); font-size: 11px; }
+
+.explore-link {
+  display: block; font-size: 13px; color: var(--seq-600); text-decoration: none;
+  padding: 7px 0; border-top: 1px solid var(--gridline);
+}
+.explore-link:hover { text-decoration: underline; }
+
+.source-note { font-size: 11px; color: var(--text-muted); line-height: 1.5; padding-top: 11px; border-top: 1px solid var(--gridline); }
+.source-note a { color: var(--text-muted); }
+
+.leaflet-popup-content { min-width: 200px; font-size: 14px; line-height: 1.6; }
+.leaflet-popup-content b { display: block; font-size: 15px; margin-bottom: 4px; }
+.popup-total { color: #196116; font-weight: 700; }
+
+.leaflet-control-attribution { font-size: 11px; }
+
+@media (max-width: 900px) {
+  body { flex-direction: column; }
+  #sidebar { width: 100%; max-height: 34dvh; order: 2; }
+  #map-container { order: 1; min-height: 60dvh; }
+
+  /* Header + mode toggle stack vertically as full-width rows instead of
+     sitting side by side (on a phone-width screen they collided: the
+     toggle's three buttons overlapped the header's title/stats). The
+     header itself is condensed — the long description drops and the two
+     headline stats sit side by side instead of stacked — so the whole
+     top group stays short enough to leave real room for the map. */
+  #top-overlay {
+    display: flex; flex-direction: column; gap: 8px;
+    position: absolute; top: 10px; left: 10px; right: 10px; z-index: 1000;
+  }
+  #header {
+    position: static; width: 100%; max-height: none;
+    padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 18px;
+  }
+  #header h1 { flex: 1 0 100%; font-size: 16px; }
+  #header .sub { display: none; }
+  .hstat { margin-top: 4px; }
+  .hstat .v { font-size: 21px; }
+  .hstat .l { font-size: 11px; }
+  #basemap-toggle { position: static; width: 100%; font-size: 12.5px; }
+  #basemap-toggle button { flex: 1; padding: 10px 6px; text-align: center; }
+
+  /* Legend / compare-panel / year-panel stack as one bottom-anchored
+     column instead of independent floating cards — on a short viewport,
+     fixed pixel offsets (the old approach) put compare-panel's taller
+     content up underneath the header/toggle stack instead of leaving it
+     hidden below the fold; flowing them in order keeps every card fully
+     visible and non-overlapping regardless of exactly how tall each one
+     renders. */
+  #bottom-overlay {
+    display: flex; flex-direction: column; gap: 8px;
+    position: absolute; bottom: 10px; left: 10px; right: 10px; z-index: 1000;
+  }
+  #legend, #compare-panel, #year-panel { position: static; width: 100%; }
+  #compare-panel .cmp-note { display: none; }
+  #year-chart { height: 34px; }
+
+  /* Leaflet's own bottom-right credit line can wrap to 2 lines on a narrow
+     screen (the EOX compare-imagery credit is long) and poke out past the
+     year-panel that's meant to sit over it — keep it to one short line. */
+  .leaflet-control-attribution {
+    max-width: 60vw; font-size: 9px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .swipe-handle { width: 44px; height: 44px; font-size: 18px; }
+}
+</style>
+</head>
+<body>
+
+<div id="map-container">
+  <div id="map"></div>
+  <div id="map2"></div>
+
+  <div id="top-overlay">
+    <div id="header">
+      <h1>🌲 Romania Deforestation Map</h1>
+      <div class="sub">Tree cover loss by county, 2001–2024 · Hansen/UMD/Google/USGS/NASA data via Global Nature Watch</div>
+      <div class="hstat"><span class="v" id="hs-total"></span><span class="l">hectares of tree cover lost<br>nationwide, 2001–2025</span></div>
+      <div class="hstat"><span class="v" id="hs-logging"></span><span class="l">of all tracked loss is<br>attributed to logging</span></div>
+    </div>
+
+    <div id="basemap-toggle">
+      <button id="btn-osm" class="active">Map</button>
+      <button id="btn-sat">Satellite</button>
+      <button id="btn-cmp">Compare imagery</button>
+    </div>
+  </div>
+
+  <div class="swipe-divider" id="swipe-divider"><div class="swipe-handle">⇔</div></div>
+  <div class="swipe-label" id="swipe-label-before">BEFORE</div>
+  <div class="swipe-label" id="swipe-label-after">AFTER</div>
+
+  <div id="bottom-overlay">
+    <div id="legend">
+      <div class="title">Tree cover lost (ha, selected years)</div>
+      <div class="ramp" id="legend-ramp"></div>
+      <div class="scale-labels"><span>0</span><span id="legend-max">high</span></div>
+    </div>
+
+    <div id="compare-panel">
+      <div class="title">Real satellite imagery</div>
+      <div class="cmp-row">
+        <label><span class="cmp-swatch" style="background:#898781"></span>Before</label>
+        <select id="cmp-before"></select>
+      </div>
+      <div class="cmp-row">
+        <label><span class="cmp-swatch" style="background:#196116"></span>After</label>
+        <select id="cmp-after"></select>
+      </div>
+      <div class="cmp-note">Drag the white divider on the map to reveal before/after. Sentinel-2 cloudless annual mosaics, EOX IT Services — real photos, not modeled data. Pan/zoom to any county (try Suceava or Harghita, the top two by loss).</div>
+    </div>
+
+    <div id="year-panel">
+      <div class="row">
+        <label>Years</label>
+        <div class="range-wrap">
+          <div class="range-track-bg"></div>
+          <div class="range-track-fill" id="range-fill"></div>
+          <input type="range" id="year-min" min="2001" max="2025" value="2001" step="1">
+          <input type="range" id="year-max" min="2001" max="2025" value="2025" step="1">
+        </div>
+        <span id="year-label">2001 – 2024</span>
+      </div>
+      <div class="range-ends"><span id="range-end-lo"></span><span id="range-end-hi"></span></div>
+      <svg class="trend-svg" id="year-chart"></svg>
+    </div>
+  </div>
+</div>
+
+<div id="sidebar">
+  <div>
+    <div class="sec-label">Highest cumulative loss</div>
+    <div class="sec-sub">Counties ranked by tree cover lost in the selected year range. Click a bar or a county on the map for its yearly detail.</div>
+    <div id="ranking"></div>
+  </div>
+
+  <div>
+    <div class="sec-label">Why the forest is disappearing</div>
+    <div class="sec-sub">Cause of tree cover loss nationwide, 2001–2024, by dominant driver (Hansen/WRI classification).</div>
+    <div id="drivers"></div>
+  </div>
+
+  <div>
+    <div class="sec-label">National trend</div>
+    <div class="sec-sub">Total hectares of tree cover lost per year, all counties. Includes 2025 nationally; the county map and ranking above cover 2001–2024 (latest year with a per-county breakdown available).</div>
+    <svg class="trend-svg" id="national-trend"></svg>
+  </div>
+
+  <div>
+    <div class="sec-label">See the actual satellite imagery</div>
+    <div class="sec-sub">The county colors above are <i>data</i> — where and how much forest disappeared, not a photo. For real before/after photos in this same map, click <b>"Compare imagery"</b> at the top right and drag the divider. Or explore externally:</div>
+    <a class="explore-link" id="link-eobrowser" href="#" target="_blank" rel="noopener">↗ Open Romania in Copernicus Browser (Sentinel-2, pick any two dates)</a>
+    <a class="explore-link" id="link-gfw" href="#" target="_blank" rel="noopener">↗ Open Romania on Global Forest Watch</a>
+  </div>
+
+  <div class="source-note">
+    Tree cover loss: Hansen/UMD/Google/USGS/NASA Global Forest Change, ≥30% canopy density threshold, via the public
+    <a href="https://globalnaturewatch.org" target="_blank">Global Nature Watch</a> data API (formerly Global Forest Watch), CC BY 4.0.
+    Loss driver classification: WRI/Google. County boundaries: GADM v3.6.
+    Compare-imagery photos: Sentinel-2 cloudless annual mosaics by <a href="https://s2maps.eu" target="_blank">EOX IT Services GmbH</a>, contains modified Copernicus Sentinel data, CC BY-SA 4.0.
+    Data fetched 2026-08-20 — GNW updates annually; figures may since have shifted slightly.
+  </div>
+</div>
+
+<script>
+const COUNTIES = {"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[23.9869, 46.4313], [23.7033, 46.4579], [23.6356, 46.4032], [23.598, 46.4873], [23.3933, 46.54], [23.048, 46.4702], [23.0014, 46.5488], [22.8135, 46.5694], [22.6784, 46.5235], [22.6781, 46.4062], [22.7503, 46.3515], [22.9348, 46.3269], [22.9832, 46.2182], [23.0971, 46.1826], [23.0855, 46.0711], [23.2359, 46.027], [23.3356, 45.909], [23.3717, 45.6276], [23.5995, 45.4727], [23.7051, 45.4971], [23.5928, 45.6771], [23.6285, 45.8078], [23.7327, 45.8319], [23.8931, 46.044], [24.0088, 46.0169], [24.2183, 46.1625], [24.2328, 46.2599], [23.9869, 46.4313]]]}, "properties": {"adm1": 1, "name": "Alba", "years": {"2001": 786, "2002": 122, "2003": 900, "2004": 336, "2005": 447, "2006": 326, "2007": 1534, "2008": 353, "2009": 582, "2010": 722, "2011": 653, "2012": 2128, "2013": 520, "2014": 790, "2015": 348, "2016": 758, "2017": 491, "2018": 418, "2019": 374, "2020": 868, "2021": 476, "2022": 448, "2023": 700, "2024": 559}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[22.6781, 46.4062], [22.4258, 46.3939], [22.0808, 46.6372], [21.8828, 46.6314], [21.8709, 46.6813], [21.578, 46.6507], [21.5687, 46.6005], [21.4575, 46.6673], [21.3157, 46.6178], [21.319, 46.4512], [21.1821, 46.3043], [21.0675, 46.2431], [20.7772, 46.2762], [20.7069, 46.1613], [21.1118, 45.9775], [21.3693, 45.9908], [21.5174, 46.0681], [21.6692, 45.9065], [21.7243, 45.9775], [21.7708, 45.9173], [21.9699, 45.9946], [22.2453, 45.903], [22.3539, 45.973], [22.4388, 46.0114], [22.4392, 46.2084], [22.6583, 46.2351], [22.7503, 46.3515], [22.6781, 46.4062]]]}, "properties": {"adm1": 2, "name": "Arad", "years": {"2001": 1473, "2002": 136, "2003": 246, "2004": 336, "2005": 346, "2006": 361, "2007": 444, "2008": 357, "2009": 373, "2010": 349, "2011": 268, "2012": 634, "2013": 461, "2014": 552, "2015": 268, "2016": 863, "2017": 614, "2018": 1216, "2019": 178, "2020": 537, "2021": 558, "2022": 711, "2023": 1156, "2024": 670}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[25.3232, 45.3814], [25.1047, 45.5855], [24.6865, 45.6045], [24.5145, 45.5872], [24.5197, 45.0413], [24.4397, 44.8457], [24.5424, 44.8914], [24.5927, 44.7501], [24.7043, 44.7328], [24.7561, 44.3917], [24.8856, 44.3829], [25.2365, 44.4246], [25.299, 44.5566], [25.1699, 44.662], [25.2391, 44.6951], [25.1985, 45.0189], [25.1267, 45.0659], [25.1479, 45.1989], [25.2305, 45.1675], [25.2953, 45.2323], [25.3232, 45.3814]]]}, "properties": {"adm1": 3, "name": "Argeș", "years": {"2001": 731, "2002": 419, "2003": 247, "2004": 1660, "2005": 1946, "2006": 753, "2007": 1328, "2008": 972, "2009": 1064, "2010": 724, "2011": 1713, "2012": 1234, "2013": 805, "2014": 914, "2015": 352, "2016": 852, "2017": 518, "2018": 411, "2019": 359, "2020": 2314, "2021": 442, "2022": 440, "2023": 507, "2024": 530}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[27.2077, 46.7702], [26.9643, 46.7541], [26.8835, 46.8279], [26.7879, 46.7172], [26.6774, 46.7679], [26.5717, 46.6788], [26.3916, 46.6507], [26.2673, 46.7034], [26.1609, 46.6419], [26.0693, 46.7125], [25.9796, 46.6889], [26.0846, 46.5127], [25.999, 46.4205], [26.1664, 46.3852], [26.1579, 46.3154], [26.2945, 46.3344], [26.2647, 46.2471], [26.4414, 46.0393], [27.1038, 46.0895], [27.307, 46.2057], [27.3517, 46.1532], [27.3952, 46.1946], [27.4946, 46.1595], [27.4507, 46.4005], [27.278, 46.6256], [27.3282, 46.6982], [27.2077, 46.7702]]]}, "properties": {"adm1": 4, "name": "Bacău", "years": {"2001": 212, "2002": 1437, "2003": 306, "2004": 1716, "2005": 1199, "2006": 746, "2007": 807, "2008": 1321, "2009": 753, "2010": 629, "2011": 1188, "2012": 837, "2013": 360, "2014": 502, "2015": 349, "2016": 827, "2017": 708, "2018": 698, "2019": 543, "2020": 718, "2021": 540, "2022": 535, "2023": 809, "2024": 687}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[22.8135, 46.5694], [22.639, 46.7998], [22.7804, 46.8972], [22.6773, 46.9544], [22.7305, 47.0074], [22.5199, 47.1096], [22.6144, 47.335], [22.5329, 47.4168], [22.361, 47.4288], [22.1824, 47.6005], [22.0257, 47.5202], [22.0372, 47.4138], [21.7924, 47.1063], [21.6502, 47.0405], [21.6833, 46.9672], [21.5207, 46.8362], [21.4575, 46.6673], [21.5687, 46.6005], [21.578, 46.6507], [21.8709, 46.6813], [21.8828, 46.6314], [22.0808, 46.6372], [22.4258, 46.3939], [22.6781, 46.4062], [22.6784, 46.5235], [22.8135, 46.5694]]]}, "properties": {"adm1": 5, "name": "Bihor", "years": {"2001": 1198, "2002": 108, "2003": 281, "2004": 474, "2005": 311, "2006": 311, "2007": 1011, "2008": 593, "2009": 344, "2010": 460, "2011": 313, "2012": 532, "2013": 351, "2014": 738, "2015": 300, "2016": 894, "2017": 680, "2018": 1923, "2019": 409, "2020": 815, "2021": 754, "2022": 1206, "2023": 1681, "2024": 634}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[24.9626, 47.597], [24.6541, 47.5583], [24.388, 47.6085], [24.1338, 47.4943], [24.0244, 47.3623], [23.921, 47.2529], [24.1376, 47.0829], [24.1811, 46.8051], [24.4535, 46.7662], [24.596, 46.9456], [24.7259, 46.904], [24.8558, 47.0962], [25.0649, 47.1367], [25.0787, 47.341], [25.0009, 47.4205], [25.0951, 47.5124], [24.9626, 47.597]]]}, "properties": {"adm1": 6, "name": "Bistrița-Năsăud", "years": {"2001": 307, "2002": 308, "2003": 396, "2004": 556, "2005": 566, "2006": 351, "2007": 2779, "2008": 483, "2009": 233, "2010": 553, "2011": 411, "2012": 1482, "2013": 389, "2014": 537, "2015": 424, "2016": 887, "2017": 571, "2018": 466, "2019": 387, "2020": 1022, "2021": 329, "2022": 343, "2023": 815, "2024": 725}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[27.3926, 47.5897], [27.2516, 47.7197], [27.1678, 47.9951], [26.808, 48.2546], [26.3361, 48.1844], [26.1006, 47.979], [26.5378, 47.649], [26.5899, 47.4672], [26.7027, 47.4718], [26.7235, 47.5147], [26.9557, 47.4971], [27.0436, 47.4384], [27.1016, 47.5481], [27.2051, 47.5192], [27.3926, 47.5897]]]}, "properties": {"adm1": 7, "name": "Botoșani", "years": {"2001": 185, "2002": 79, "2003": 27, "2004": 87, "2005": 22, "2006": 12, "2007": 26, "2008": 44, "2009": 25, "2010": 36, "2011": 41, "2012": 41, "2013": 79, "2014": 267, "2015": 92, "2016": 154, "2017": 168, "2018": 123, "2019": 116, "2020": 109, "2021": 89, "2022": 81, "2023": 125, "2024": 153}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[25.3232, 45.3814], [25.4531, 45.4411], [25.6827, 45.5009], [25.8579, 45.4271], [25.9234, 45.5224], [26.0738, 45.5066], [26.0924, 45.5172], [25.9729, 45.6881], [25.6734, 45.7461], [25.5692, 45.8367], [25.5829, 46.0262], [25.4527, 46.1043], [25.3291, 46.1781], [25.1747, 46.1675], [24.9481, 46.0794], [24.7051, 45.9406], [24.7769, 45.8505], [24.6407, 45.7953], [24.6865, 45.6045], [25.1047, 45.5855], [25.3232, 45.3814]]]}, "properties": {"adm1": 8, "name": "Brașov", "years": {"2001": 338, "2002": 356, "2003": 156, "2004": 643, "2005": 428, "2006": 416, "2007": 464, "2008": 788, "2009": 498, "2010": 355, "2011": 564, "2012": 545, "2013": 429, "2014": 606, "2015": 455, "2016": 699, "2017": 440, "2018": 336, "2019": 380, "2020": 614, "2021": 453, "2022": 507, "2023": 624, "2024": 749}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[28.0319, 45.4045], [27.8168, 45.3947], [27.5601, 45.4886], [27.4354, 45.3947], [27.3368, 45.2112], [27.1768, 45.2496], [27.0681, 45.159], [27.1515, 45.1708], [27.2832, 44.9978], [27.2051, 44.7875], [27.722, 44.7672], [27.828, 44.8204], [27.8827, 44.7634], [28.0755, 44.8041], [28.1979, 45.1402], [28.093, 45.1906], [28.1175, 45.2581], [27.9962, 45.287], [28.0319, 45.4045]]]}, "properties": {"adm1": 9, "name": "Brăila", "years": {"2001": 19, "2002": 31, "2003": 20, "2004": 25, "2005": 20, "2006": 10, "2007": 51, "2008": 15, "2009": 38, "2010": 68, "2011": 28, "2012": 66, "2013": 34, "2014": 70, "2015": 113, "2016": 122, "2017": 174, "2018": 77, "2019": 128, "2020": 167, "2021": 167, "2022": 232, "2023": 142, "2024": 131}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[26.0276, 44.3922], [26.1549, 44.3359], [26.2342, 44.4374], [26.105, 44.5403], [25.9841, 44.4976], [26.0276, 44.3922]]]}, "properties": {"adm1": 10, "name": "Bucharest", "years": {"2001": 0, "2002": 0, "2003": 0, "2004": 2, "2005": 1, "2006": 1, "2007": 1, "2008": 3, "2009": 1, "2010": 1, "2011": 0, "2012": 0, "2013": 0, "2014": 0, "2015": 2, "2016": 1, "2017": 0, "2018": 0, "2019": 0, "2020": 0, "2021": 2, "2022": 0, "2023": 0, "2024": 0}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[26.0738, 45.5066], [26.2517, 45.213], [26.3585, 45.2135], [26.3782, 45.1587], [26.4619, 45.1984], [26.4474, 45.0737], [26.6015, 44.9562], [26.5345, 44.9399], [26.607, 44.8573], [26.8117, 44.7955], [27.0093, 44.8247], [27.1355, 44.7358], [27.2051, 44.7875], [27.2832, 44.9978], [27.1515, 45.1708], [27.0681, 45.159], [27.1768, 45.2496], [27.3368, 45.2112], [27.4354, 45.3947], [27.2717, 45.3904], [27.281, 45.4547], [27.1161, 45.4095], [27.16, 45.4655], [26.7496, 45.5491], [26.5315, 45.6414], [26.3934, 45.8028], [26.3279, 45.6249], [26.2148, 45.6218], [26.0924, 45.5172], [26.0738, 45.5066]]]}, "properties": {"adm1": 11, "name": "Buzău", "years": {"2001": 103, "2002": 296, "2003": 79, "2004": 429, "2005": 201, "2006": 198, "2007": 143, "2008": 256, "2009": 171, "2010": 211, "2011": 136, "2012": 210, "2013": 220, "2014": 331, "2015": 145, "2016": 187, "2017": 281, "2018": 189, "2019": 190, "2020": 393, "2021": 285, "2022": 390, "2023": 339, "2024": 387}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[28.02, 44.3402], [27.7733, 44.3445], [27.5716, 44.468], [27.5478, 44.5624], [27.5199, 44.4973], [27.3472, 44.4863], [26.7979, 44.5114], [26.6662, 44.5957], [26.6007, 44.5232], [26.4794, 44.5731], [26.4176, 44.5214], [26.3618, 44.4861], [26.4641, 44.4534], [26.2941, 44.417], [26.2613, 44.295], [26.402, 44.2243], [26.3815, 44.0433], [27.0436, 44.1449], [27.2728, 44.1266], [27.9356, 44.2501], [28.02, 44.3402]]]}, "properties": {"adm1": 12, "name": "Călărași", "years": {"2001": 17, "2002": 53, "2003": 11, "2004": 26, "2005": 34, "2006": 14, "2007": 59, "2008": 76, "2009": 49, "2010": 83, "2011": 51, "2012": 84, "2013": 92, "2014": 148, "2015": 185, "2016": 259, "2017": 239, "2018": 237, "2019": 187, "2020": 184, "2021": 328, "2022": 283, "2023": 412, "2024": 220}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[22.6836, 45.2506], [22.6788, 45.5162], [22.428, 45.6693], [22.3227, 45.6625], [22.2706, 45.5857], [22.0469, 45.592], [22.1094, 45.5363], [22.0358, 45.5019], [21.6015, 45.5714], [21.5821, 45.5061], [21.4351, 45.4712], [21.4541, 45.3525], [21.562, 45.3166], [21.479, 45.1939], [21.5289, 45.1382], [21.3618, 45.0207], [21.5617, 44.8894], [21.3685, 44.8648], [21.3938, 44.7832], [21.5929, 44.7559], [21.6428, 44.6597], [22.0175, 44.5995], [22.1493, 44.5875], [22.2166, 44.8174], [22.4198, 44.7564], [22.4931, 44.974], [22.658, 45.108], [22.562, 45.1565], [22.6836, 45.2506]]]}, "properties": {"adm1": 13, "name": "Caraș-Severin", "years": {"2001": 1387, "2002": 92, "2003": 198, "2004": 401, "2005": 377, "2006": 384, "2007": 380, "2008": 648, "2009": 422, "2010": 453, "2011": 249, "2012": 629, "2013": 541, "2014": 923, "2015": 300, "2016": 1004, "2017": 394, "2018": 572, "2019": 441, "2020": 888, "2021": 527, "2022": 653, "2023": 1827, "2024": 639}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[23.9869, 46.4313], [23.9608, 46.5147], [24.126, 46.7004], [24.0695, 46.7348], [24.1811, 46.8051], [24.1376, 47.0829], [23.921, 47.2529], [24.0244, 47.3623], [23.8428, 47.3402], [23.8108, 47.2514], [23.7636, 47.2837], [23.4997, 47.155], [23.4759, 47.0169], [23.3408, 46.909], [23.2392, 46.9477], [23.096, 46.8595], [22.7305, 47.0074], [22.6773, 46.9544], [22.7804, 46.8972], [22.639, 46.7998], [22.8135, 46.5694], [23.0014, 46.5488], [23.048, 46.4702], [23.3933, 46.54], [23.598, 46.4873], [23.6356, 46.4032], [23.7033, 46.4579], [23.9869, 46.4313]]]}, "properties": {"adm1": 14, "name": "Cluj", "years": {"2001": 842, "2002": 237, "2003": 1926, "2004": 892, "2005": 806, "2006": 399, "2007": 5342, "2008": 498, "2009": 713, "2010": 961, "2011": 485, "2012": 2655, "2013": 331, "2014": 422, "2015": 213, "2016": 696, "2017": 529, "2018": 735, "2019": 288, "2020": 743, "2021": 386, "2022": 510, "2023": 1049, "2024": 606}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[27.8827, 44.7634], [28.1105, 44.4411], [28.02, 44.3402], [27.9356, 44.2501], [27.2728, 44.1266], [27.4008, 44.0127], [27.6449, 44.0483], [27.7394, 43.9539], [27.9184, 44.0084], [27.9958, 43.8432], [28.1175, 43.7975], [28.5797, 43.7403], [28.6679, 43.9868], [28.6311, 44.3121], [28.9943, 44.6806], [28.8261, 44.6324], [28.4365, 44.6748], [28.4149, 44.6131], [28.2411, 44.7649], [28.0755, 44.8041], [27.8827, 44.7634]]]}, "properties": {"adm1": 15, "name": "Constanța", "years": {"2001": 19, "2002": 40, "2003": 23, "2004": 24, "2005": 13, "2006": 9, "2007": 19, "2008": 18, "2009": 20, "2010": 32, "2011": 23, "2012": 60, "2013": 24, "2014": 39, "2015": 75, "2016": 91, "2017": 87, "2018": 65, "2019": 84, "2020": 81, "2021": 114, "2022": 129, "2023": 166, "2024": 76}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[26.2647, 46.2471], [26.1743, 46.1605], [25.8594, 46.1196], [25.7016, 46.277], [25.4527, 46.1043], [25.5829, 46.0262], [25.5692, 45.8367], [25.6734, 45.7461], [25.9729, 45.6881], [26.0924, 45.5172], [26.2148, 45.6218], [26.3279, 45.6249], [26.3934, 45.8028], [26.4414, 46.0393], [26.2647, 46.2471]]]}, "properties": {"adm1": 16, "name": "Covasna", "years": {"2001": 138, "2002": 505, "2003": 129, "2004": 598, "2005": 520, "2006": 446, "2007": 316, "2008": 511, "2009": 309, "2010": 308, "2011": 483, "2012": 480, "2013": 381, "2014": 571, "2015": 347, "2016": 610, "2017": 583, "2018": 462, "2019": 490, "2020": 775, "2021": 317, "2022": 444, "2023": 535, "2024": 496}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[25.2365, 44.4246], [25.3965, 44.5184], [25.4817, 44.4522], [25.5405, 44.5393], [25.8922, 44.5415], [25.9934, 44.6123], [25.9703, 44.721], [25.8747, 44.8262], [25.7783, 44.8252], [25.7891, 44.9532], [25.6894, 44.9476], [25.7028, 45.0455], [25.536, 45.1884], [25.4531, 45.4411], [25.3232, 45.3814], [25.2953, 45.2323], [25.2305, 45.1675], [25.1479, 45.1989], [25.1267, 45.0659], [25.1985, 45.0189], [25.2391, 44.6951], [25.1699, 44.662], [25.299, 44.5566], [25.2365, 44.4246]]]}, "properties": {"adm1": 17, "name": "Dâmbovița", "years": {"2001": 319, "2002": 318, "2003": 251, "2004": 423, "2005": 152, "2006": 110, "2007": 326, "2008": 101, "2009": 93, "2010": 84, "2011": 119, "2012": 84, "2013": 119, "2014": 249, "2015": 64, "2016": 92, "2017": 125, "2018": 118, "2019": 132, "2020": 411, "2021": 111, "2022": 130, "2023": 196, "2024": 176}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[23.7826, 44.7137], [23.7208, 44.7285], [23.7122, 44.6078], [23.4566, 44.5699], [23.2013, 44.4682], [23.25, 44.3854], [23.0956, 44.2629], [23.1116, 44.1505], [23.0067, 44.1585], [22.968, 44.0988], [23.0472, 44.0583], [22.8801, 43.9818], [22.8682, 43.8387], [23.0554, 43.796], [23.4167, 43.853], [24.1141, 43.6999], [24.2615, 43.9743], [24.1755, 44.0066], [24.1912, 44.0694], [24.2723, 44.1085], [24.0468, 44.3686], [23.8834, 44.4236], [23.9299, 44.5305], [23.7826, 44.7137]]]}, "properties": {"adm1": 18, "name": "Dolj", "years": {"2001": 216, "2002": 484, "2003": 111, "2004": 227, "2005": 221, "2006": 83, "2007": 174, "2008": 115, "2009": 319, "2010": 85, "2011": 230, "2012": 161, "2013": 260, "2014": 263, "2015": 128, "2016": 151, "2017": 135, "2018": 176, "2019": 159, "2020": 291, "2021": 190, "2022": 164, "2023": 201, "2024": 169}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[28.0319, 45.4045], [28.2344, 45.4635], [28.0911, 45.6103], [28.1756, 45.6462], [28.1175, 46.108], [27.8708, 46.1615], [27.7845, 46.0952], [27.5928, 46.1505], [27.5638, 46.0069], [27.5046, 46.1397], [27.2278, 46.0029], [27.2501, 45.8729], [27.5601, 45.4886], [27.8168, 45.3947], [28.0319, 45.4045]]]}, "properties": {"adm1": 19, "name": "Galați", "years": {"2001": 21, "2002": 34, "2003": 4, "2004": 28, "2005": 17, "2006": 18, "2007": 18, "2008": 32, "2009": 31, "2010": 69, "2011": 23, "2012": 207, "2013": 26, "2014": 38, "2015": 34, "2016": 79, "2017": 100, "2018": 122, "2019": 58, "2020": 99, "2021": 106, "2022": 156, "2023": 123, "2024": 105}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[26.2613, 44.295], [26.1508, 44.2338], [25.8706, 44.3573], [25.8922, 44.5415], [25.5405, 44.5393], [25.4817, 44.4522], [25.4694, 44.3257], [25.6972, 44.2499], [25.7065, 44.1093], [25.6265, 44.0862], [25.5867, 43.9381], [25.6734, 43.6916], [26.1132, 43.9725], [26.3815, 44.0433], [26.402, 44.2243], [26.2613, 44.295]]]}, "properties": {"adm1": 20, "name": "Giurgiu", "years": {"2001": 32, "2002": 56, "2003": 22, "2004": 50, "2005": 8, "2006": 22, "2007": 33, "2008": 31, "2009": 29, "2010": 41, "2011": 11, "2012": 38, "2013": 35, "2014": 64, "2015": 73, "2016": 101, "2017": 83, "2018": 77, "2019": 66, "2020": 93, "2021": 79, "2022": 90, "2023": 180, "2024": 173}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[22.658, 45.108], [22.8932, 44.9963], [22.943, 44.7835], [23.4566, 44.5699], [23.7122, 44.6078], [23.7208, 44.7285], [23.7826, 44.7137], [23.848, 45.3277], [23.592, 45.3533], [22.6836, 45.2506], [22.562, 45.1565], [22.658, 45.108]]]}, "properties": {"adm1": 21, "name": "Gorj", "years": {"2001": 483, "2002": 224, "2003": 92, "2004": 255, "2005": 301, "2006": 399, "2007": 275, "2008": 357, "2009": 281, "2010": 253, "2011": 178, "2012": 487, "2013": 432, "2014": 855, "2015": 204, "2016": 318, "2017": 212, "2018": 338, "2019": 280, "2020": 489, "2021": 255, "2022": 384, "2023": 513, "2024": 412}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[25.9796, 46.6889], [25.868, 46.6502], [25.7958, 46.7059], [25.839, 46.8176], [25.766, 46.8852], [25.8572, 46.921], [25.6633, 47.092], [25.5372, 47.0837], [25.4274, 47.1843], [25.2484, 47.0983], [25.2964, 46.6884], [25.024, 46.5413], [24.9808, 46.3849], [24.8625, 46.3555], [24.9451, 46.2431], [25.0712, 46.2453], [25.1747, 46.1675], [25.3291, 46.1781], [25.4527, 46.1043], [25.7016, 46.277], [25.8594, 46.1196], [26.1743, 46.1605], [26.2647, 46.2471], [26.2945, 46.3344], [26.1579, 46.3154], [26.1664, 46.3852], [25.999, 46.4205], [26.0846, 46.5127], [25.9796, 46.6889]]]}, "properties": {"adm1": 22, "name": "Harghita", "years": {"2001": 1570, "2002": 1963, "2003": 641, "2004": 1661, "2005": 2751, "2006": 1646, "2007": 4342, "2008": 2809, "2009": 2618, "2010": 1478, "2011": 2208, "2012": 2746, "2013": 794, "2014": 1304, "2015": 833, "2016": 1684, "2017": 1872, "2018": 1377, "2019": 978, "2020": 3522, "2021": 793, "2022": 1131, "2023": 1197, "2024": 1060}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[22.7503, 46.3515], [22.6583, 46.2351], [22.4392, 46.2084], [22.4388, 46.0114], [22.3539, 45.973], [22.553, 45.7792], [22.428, 45.6693], [22.6788, 45.5162], [22.6836, 45.2506], [23.592, 45.3533], [23.5995, 45.4727], [23.3717, 45.6276], [23.3356, 45.909], [23.2359, 46.027], [23.0855, 46.0711], [23.0971, 46.1826], [22.9832, 46.2182], [22.9348, 46.3269], [22.7503, 46.3515]]]}, "properties": {"adm1": 23, "name": "Hunedoara", "years": {"2001": 922, "2002": 159, "2003": 295, "2004": 379, "2005": 276, "2006": 403, "2007": 471, "2008": 392, "2009": 312, "2010": 334, "2011": 337, "2012": 943, "2013": 416, "2014": 538, "2015": 333, "2016": 664, "2017": 448, "2018": 506, "2019": 403, "2020": 1139, "2021": 600, "2022": 691, "2023": 1297, "2024": 1003}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[26.7027, 47.4718], [26.6751, 47.3588], [26.495, 47.3924], [26.5762, 47.3068], [26.5095, 47.272], [26.6379, 47.0927], [26.904, 47.0282], [27.1571, 47.0827], [27.2419, 47.0122], [27.1236, 46.9509], [27.2039, 46.8829], [27.601, 46.8824], [27.6226, 46.9918], [27.77, 46.8781], [27.8116, 46.9537], [27.7986, 46.8606], [27.9095, 46.8066], [27.9437, 46.8553], [28.116, 46.838], [28.0974, 46.9765], [27.8068, 47.1379], [27.3926, 47.5897], [27.2051, 47.5192], [27.1016, 47.5481], [27.0436, 47.4384], [26.9557, 47.4971], [26.7235, 47.5147], [26.7027, 47.4718]]]}, "properties": {"adm1": 24, "name": "Iași", "years": {"2001": 87, "2002": 144, "2003": 58, "2004": 161, "2005": 135, "2006": 50, "2007": 179, "2008": 87, "2009": 27, "2010": 133, "2011": 45, "2012": 173, "2013": 171, "2014": 564, "2015": 167, "2016": 217, "2017": 328, "2018": 186, "2019": 186, "2020": 210, "2021": 251, "2022": 163, "2023": 250, "2024": 210}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[27.2051, 44.7875], [27.1355, 44.7358], [27.0093, 44.8247], [26.8117, 44.7955], [26.607, 44.8573], [26.3034, 44.7689], [26.4176, 44.5214], [26.4794, 44.5731], [26.6007, 44.5232], [26.6662, 44.5957], [26.7979, 44.5114], [27.3472, 44.4863], [27.5199, 44.4973], [27.5478, 44.5624], [27.5716, 44.468], [27.7733, 44.3445], [28.02, 44.3402], [28.1105, 44.4411], [27.8827, 44.7634], [27.828, 44.8204], [27.722, 44.7672], [27.2051, 44.7875]]]}, "properties": {"adm1": 25, "name": "Ialomița", "years": {"2001": 17, "2002": 47, "2003": 18, "2004": 31, "2005": 30, "2006": 31, "2007": 53, "2008": 31, "2009": 35, "2010": 58, "2011": 27, "2012": 69, "2013": 42, "2014": 96, "2015": 127, "2016": 187, "2017": 200, "2018": 136, "2019": 147, "2020": 158, "2021": 141, "2022": 129, "2023": 258, "2024": 188}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[26.4176, 44.5214], [26.3034, 44.7689], [25.9703, 44.721], [25.9934, 44.6123], [25.8922, 44.5415], [25.8706, 44.3573], [26.1508, 44.2338], [26.2613, 44.295], [26.2941, 44.417], [26.4641, 44.4534], [26.3618, 44.4861], [26.4176, 44.5214]], [[26.0276, 44.3922], [25.9841, 44.4976], [26.105, 44.5403], [26.2342, 44.4374], [26.1549, 44.3359], [26.0276, 44.3922]]]}, "properties": {"adm1": 26, "name": "Ilfov", "years": {"2001": 8, "2002": 49, "2003": 8, "2004": 41, "2005": 9, "2006": 15, "2007": 11, "2008": 11, "2009": 13, "2010": 21, "2011": 19, "2012": 25, "2013": 28, "2014": 37, "2015": 19, "2016": 36, "2017": 50, "2018": 32, "2019": 12, "2020": 17, "2021": 38, "2022": 59, "2023": 101, "2024": 88}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[24.9626, 47.597], [25.053, 47.659], [24.9488, 47.7293], [24.5644, 47.9687], [24.2299, 47.8967], [24.0107, 47.9675], [23.8689, 47.9323], [23.7736, 47.9951], [23.4953, 47.968], [23.6415, 47.8648], [23.4659, 47.7672], [23.2634, 47.7976], [23.2318, 47.7396], [23.3885, 47.6876], [23.259, 47.5506], [23.1443, 47.6246], [23.0472, 47.4876], [22.965, 47.4868], [23.0368, 47.4158], [23.1053, 47.4414], [23.8428, 47.3402], [24.0244, 47.3623], [24.1338, 47.4943], [24.388, 47.6085], [24.6541, 47.5583], [24.9626, 47.597]]]}, "properties": {"adm1": 27, "name": "Maramureș", "years": {"2001": 662, "2002": 292, "2003": 450, "2004": 1972, "2005": 1597, "2006": 1111, "2007": 3123, "2008": 1599, "2009": 871, "2010": 1850, "2011": 1292, "2012": 2748, "2013": 848, "2014": 1354, "2015": 815, "2016": 1791, "2017": 978, "2018": 1248, "2019": 514, "2020": 912, "2021": 614, "2022": 408, "2023": 868, "2024": 578}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[22.0175, 44.5995], [22.1422, 44.4707], [22.4325, 44.7104], [22.7078, 44.6035], [22.7648, 44.5405], [22.5835, 44.5496], [22.4659, 44.4451], [22.6751, 44.2172], [22.968, 44.0988], [23.0067, 44.1585], [23.1116, 44.1505], [23.0956, 44.2629], [23.25, 44.3854], [23.2013, 44.4682], [23.4566, 44.5699], [22.943, 44.7835], [22.8932, 44.9963], [22.658, 45.108], [22.4931, 44.974], [22.4198, 44.7564], [22.2166, 44.8174], [22.1493, 44.5875], [22.0175, 44.5995]]]}, "properties": {"adm1": 28, "name": "Mehedinți", "years": {"2001": 314, "2002": 197, "2003": 105, "2004": 260, "2005": 174, "2006": 152, "2007": 141, "2008": 149, "2009": 326, "2010": 140, "2011": 83, "2012": 179, "2013": 249, "2014": 288, "2015": 69, "2016": 104, "2017": 86, "2018": 120, "2019": 105, "2020": 217, "2021": 159, "2022": 238, "2023": 285, "2024": 307}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[24.2328, 46.2599], [24.6653, 46.2815], [24.698, 46.0837], [24.9481, 46.0794], [25.1747, 46.1675], [25.0712, 46.2453], [24.9451, 46.2431], [24.8625, 46.3555], [24.9808, 46.3849], [25.024, 46.5413], [25.2964, 46.6884], [25.2484, 47.0983], [25.0649, 47.1367], [24.8558, 47.0962], [24.7259, 46.904], [24.596, 46.9456], [24.4535, 46.7662], [24.1811, 46.8051], [24.0695, 46.7348], [24.126, 46.7004], [23.9608, 46.5147], [23.9869, 46.4313], [24.2328, 46.2599]]]}, "properties": {"adm1": 29, "name": "Mureș", "years": {"2001": 281, "2002": 288, "2003": 211, "2004": 423, "2005": 594, "2006": 427, "2007": 1528, "2008": 463, "2009": 499, "2010": 641, "2011": 471, "2012": 907, "2013": 437, "2014": 618, "2015": 486, "2016": 738, "2017": 749, "2018": 693, "2019": 513, "2020": 2025, "2021": 392, "2022": 387, "2023": 909, "2024": 735}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[27.2077, 46.7702], [27.2039, 46.8829], [27.1236, 46.9509], [27.2419, 47.0122], [27.1571, 47.0827], [26.904, 47.0282], [26.6379, 47.0927], [26.5095, 47.272], [26.4072, 47.3405], [25.9253, 47.2594], [25.7705, 47.3156], [25.8148, 47.2617], [25.6633, 47.092], [25.8572, 46.921], [25.766, 46.8852], [25.839, 46.8176], [25.7958, 46.7059], [25.868, 46.6502], [25.9796, 46.6889], [26.0693, 46.7125], [26.1609, 46.6419], [26.2673, 46.7034], [26.3916, 46.6507], [26.5717, 46.6788], [26.6774, 46.7679], [26.7879, 46.7172], [26.8835, 46.8279], [26.9643, 46.7541], [27.2077, 46.7702]]]}, "properties": {"adm1": 30, "name": "Neamț", "years": {"2001": 700, "2002": 891, "2003": 250, "2004": 553, "2005": 905, "2006": 407, "2007": 705, "2008": 786, "2009": 814, "2010": 705, "2011": 642, "2012": 692, "2013": 436, "2014": 522, "2015": 418, "2016": 806, "2017": 1091, "2018": 766, "2019": 592, "2020": 1185, "2021": 762, "2022": 782, "2023": 787, "2024": 1010}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[24.4397, 44.8457], [24.3917, 44.9017], [24.276, 44.7692], [24.3266, 44.5611], [24.2611, 44.6005], [24.2604, 44.5493], [24.1569, 44.5588], [24.0791, 44.4906], [23.9299, 44.5305], [23.8834, 44.4236], [24.0468, 44.3686], [24.2723, 44.1085], [24.1912, 44.0694], [24.1755, 44.0066], [24.2615, 43.9743], [24.1141, 43.6999], [24.3501, 43.6976], [24.5142, 43.7629], [24.6586, 43.724], [24.7449, 43.8224], [24.5934, 43.9584], [24.8558, 44.0955], [24.7948, 44.1916], [24.8856, 44.3829], [24.7561, 44.3917], [24.7043, 44.7328], [24.5927, 44.7501], [24.5424, 44.8914], [24.4397, 44.8457]]]}, "properties": {"adm1": 31, "name": "Olt", "years": {"2001": 185, "2002": 204, "2003": 48, "2004": 82, "2005": 90, "2006": 43, "2007": 115, "2008": 28, "2009": 114, "2010": 71, "2011": 58, "2012": 90, "2013": 121, "2014": 91, "2015": 43, "2016": 48, "2017": 80, "2018": 74, "2019": 78, "2020": 139, "2021": 78, "2022": 112, "2023": 130, "2024": 174}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[25.4531, 45.4411], [25.536, 45.1884], [25.7028, 45.0455], [25.6894, 44.9476], [25.7891, 44.9532], [25.7783, 44.8252], [25.8747, 44.8262], [25.9703, 44.721], [26.3034, 44.7689], [26.607, 44.8573], [26.5345, 44.9399], [26.6015, 44.9562], [26.4474, 45.0737], [26.4619, 45.1984], [26.3782, 45.1587], [26.3585, 45.2135], [26.2517, 45.213], [26.0738, 45.5066], [25.9234, 45.5224], [25.8579, 45.4271], [25.6827, 45.5009], [25.4531, 45.4411]]]}, "properties": {"adm1": 32, "name": "Prahova", "years": {"2001": 92, "2002": 491, "2003": 28, "2004": 344, "2005": 159, "2006": 101, "2007": 126, "2008": 131, "2009": 127, "2010": 121, "2011": 167, "2012": 170, "2013": 147, "2014": 203, "2015": 83, "2016": 124, "2017": 146, "2018": 113, "2019": 123, "2020": 461, "2021": 171, "2022": 159, "2023": 184, "2024": 242}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[22.7305, 47.0074], [23.096, 46.8595], [23.2392, 46.9477], [23.3408, 46.909], [23.4759, 47.0169], [23.4997, 47.155], [23.7636, 47.2837], [23.8108, 47.2514], [23.8428, 47.3402], [23.1053, 47.4414], [23.0889, 47.3638], [22.7804, 47.4165], [22.6144, 47.335], [22.5199, 47.1096], [22.7305, 47.0074]]]}, "properties": {"adm1": 33, "name": "Sălaj", "years": {"2001": 125, "2002": 27, "2003": 76, "2004": 363, "2005": 49, "2006": 85, "2007": 82, "2008": 148, "2009": 83, "2010": 109, "2011": 60, "2012": 139, "2013": 92, "2014": 115, "2015": 130, "2016": 126, "2017": 139, "2018": 109, "2019": 40, "2020": 117, "2021": 130, "2022": 164, "2023": 336, "2024": 201}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[22.6144, 47.335], [22.7804, 47.4165], [23.0889, 47.3638], [23.1053, 47.4414], [23.0368, 47.4158], [22.965, 47.4868], [23.0472, 47.4876], [23.1443, 47.6246], [23.259, 47.5506], [23.3885, 47.6876], [23.2318, 47.7396], [23.2634, 47.7976], [23.4659, 47.7672], [23.6415, 47.8648], [23.4953, 47.968], [23.1786, 48.1201], [23.0926, 48.0056], [22.9285, 48.0194], [22.6818, 47.788], [22.4496, 47.8033], [22.2661, 47.7315], [22.1824, 47.6005], [22.361, 47.4288], [22.5329, 47.4168], [22.6144, 47.335]]]}, "properties": {"adm1": 34, "name": "Satu Mare", "years": {"2001": 274, "2002": 91, "2003": 101, "2004": 409, "2005": 176, "2006": 156, "2007": 201, "2008": 216, "2009": 216, "2010": 196, "2011": 115, "2012": 245, "2013": 107, "2014": 214, "2015": 143, "2016": 188, "2017": 211, "2018": 146, "2019": 117, "2020": 186, "2021": 154, "2022": 170, "2023": 293, "2024": 231}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[23.7051, 45.4971], [24.5145, 45.5872], [24.6865, 45.6045], [24.6407, 45.7953], [24.7769, 45.8505], [24.7051, 45.9406], [24.9481, 46.0794], [24.698, 46.0837], [24.6653, 46.2815], [24.2328, 46.2599], [24.2183, 46.1625], [24.0088, 46.0169], [23.8931, 46.044], [23.7327, 45.8319], [23.6285, 45.8078], [23.5928, 45.6771], [23.7051, 45.4971]]]}, "properties": {"adm1": 35, "name": "Sibiu", "years": {"2001": 385, "2002": 196, "2003": 380, "2004": 419, "2005": 233, "2006": 286, "2007": 611, "2008": 435, "2009": 463, "2010": 490, "2011": 333, "2012": 1478, "2013": 300, "2014": 568, "2015": 456, "2016": 986, "2017": 606, "2018": 431, "2019": 340, "2020": 836, "2021": 695, "2022": 472, "2023": 716, "2024": 591}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[25.0649, 47.1367], [25.2484, 47.0983], [25.4274, 47.1843], [25.5372, 47.0837], [25.6633, 47.092], [25.8148, 47.2617], [25.7705, 47.3156], [25.9253, 47.2594], [26.4072, 47.3405], [26.5095, 47.272], [26.5762, 47.3068], [26.495, 47.3924], [26.6751, 47.3588], [26.7027, 47.4718], [26.5899, 47.4672], [26.5378, 47.649], [26.1006, 47.979], [25.3124, 47.9145], [25.1174, 47.7551], [24.9488, 47.7293], [25.053, 47.659], [24.9626, 47.597], [25.0951, 47.5124], [25.0009, 47.4205], [25.0787, 47.341], [25.0649, 47.1367]]]}, "properties": {"adm1": 36, "name": "Suceava", "years": {"2001": 959, "2002": 4818, "2003": 757, "2004": 1030, "2005": 2752, "2006": 1796, "2007": 9561, "2008": 1760, "2009": 2132, "2010": 3582, "2011": 2935, "2012": 5454, "2013": 1637, "2014": 2310, "2015": 1472, "2016": 3329, "2017": 3357, "2018": 3068, "2019": 1810, "2020": 2990, "2021": 1742, "2022": 1956, "2023": 3774, "2024": 3462}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[24.8856, 44.3829], [24.7948, 44.1916], [24.8558, 44.0955], [24.5934, 43.9584], [24.7449, 43.8224], [24.6586, 43.724], [24.736, 43.6853], [25.0002, 43.7275], [25.3917, 43.6193], [25.6734, 43.6916], [25.5867, 43.9381], [25.6265, 44.0862], [25.7065, 44.1093], [25.6972, 44.2499], [25.4694, 44.3257], [25.4817, 44.4522], [25.3965, 44.5184], [25.2365, 44.4246], [24.8856, 44.3829]]]}, "properties": {"adm1": 37, "name": "Teleorman", "years": {"2001": 105, "2002": 45, "2003": 57, "2004": 60, "2005": 27, "2006": 58, "2007": 60, "2008": 16, "2009": 55, "2010": 53, "2011": 40, "2012": 48, "2013": 35, "2014": 32, "2015": 34, "2016": 53, "2017": 93, "2018": 47, "2019": 96, "2020": 75, "2021": 129, "2022": 89, "2023": 161, "2024": 162}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[20.7069, 46.1613], [20.6354, 46.1271], [20.5048, 46.1899], [20.2663, 46.1098], [20.7024, 45.7509], [20.8248, 45.7755], [20.7727, 45.4805], [21.018, 45.3249], [21.1854, 45.3211], [21.2774, 45.23], [21.479, 45.1939], [21.562, 45.3166], [21.4541, 45.3525], [21.4351, 45.4712], [21.5821, 45.5061], [21.6015, 45.5714], [22.0358, 45.5019], [22.1094, 45.5363], [22.0469, 45.592], [22.2706, 45.5857], [22.3227, 45.6625], [22.428, 45.6693], [22.553, 45.7792], [22.3539, 45.973], [22.2453, 45.903], [21.9699, 45.9946], [21.7708, 45.9173], [21.7243, 45.9775], [21.6692, 45.9065], [21.5174, 46.0681], [21.3693, 45.9908], [21.1118, 45.9775], [20.7069, 46.1613]]]}, "properties": {"adm1": 38, "name": "Timiș", "years": {"2001": 1399, "2002": 129, "2003": 134, "2004": 319, "2005": 197, "2006": 167, "2007": 243, "2008": 132, "2009": 202, "2010": 201, "2011": 119, "2012": 303, "2013": 197, "2014": 242, "2015": 84, "2016": 228, "2017": 171, "2018": 120, "2019": 97, "2020": 278, "2021": 149, "2022": 355, "2023": 405, "2024": 288}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[28.0755, 44.8041], [28.2411, 44.7649], [28.4149, 44.6131], [28.4365, 44.6748], [28.8261, 44.6324], [28.9943, 44.6806], [29.1565, 44.7765], [29.6042, 44.8407], [29.7032, 45.1648], [29.6303, 45.2067], [29.6526, 45.34], [29.3311, 45.4479], [28.9504, 45.2832], [28.8041, 45.3362], [28.7204, 45.2245], [28.3516, 45.3201], [28.2344, 45.4635], [28.0319, 45.4045], [27.9962, 45.287], [28.1175, 45.2581], [28.093, 45.1906], [28.1979, 45.1402], [28.0755, 44.8041]]]}, "properties": {"adm1": 39, "name": "Tulcea", "years": {"2001": 101, "2002": 98, "2003": 81, "2004": 51, "2005": 87, "2006": 180, "2007": 234, "2008": 118, "2009": 194, "2010": 241, "2011": 117, "2012": 321, "2013": 160, "2014": 170, "2015": 100, "2016": 154, "2017": 217, "2018": 195, "2019": 301, "2020": 159, "2021": 248, "2022": 281, "2023": 307, "2024": 215}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[23.5995, 45.4727], [23.592, 45.3533], [23.848, 45.3277], [23.7826, 44.7137], [23.9299, 44.5305], [24.0791, 44.4906], [24.1569, 44.5588], [24.2604, 44.5493], [24.2611, 44.6005], [24.3266, 44.5611], [24.276, 44.7692], [24.3917, 44.9017], [24.4397, 44.8457], [24.5197, 45.0413], [24.5145, 45.5872], [23.7051, 45.4971], [23.5995, 45.4727]]]}, "properties": {"adm1": 40, "name": "Vâlcea", "years": {"2001": 392, "2002": 423, "2003": 155, "2004": 361, "2005": 662, "2006": 286, "2007": 504, "2008": 267, "2009": 384, "2010": 406, "2011": 373, "2012": 883, "2013": 476, "2014": 861, "2015": 384, "2016": 711, "2017": 435, "2018": 371, "2019": 259, "2020": 683, "2021": 445, "2022": 369, "2023": 358, "2024": 397}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[27.4946, 46.1595], [27.5046, 46.1397], [27.5638, 46.0069], [27.5928, 46.1505], [27.7845, 46.0952], [27.8708, 46.1615], [28.1175, 46.108], [28.1134, 46.2333], [28.2601, 46.4273], [28.2377, 46.6653], [28.116, 46.838], [27.9437, 46.8553], [27.9095, 46.8066], [27.7986, 46.8606], [27.8116, 46.9537], [27.77, 46.8781], [27.6226, 46.9918], [27.601, 46.8824], [27.2039, 46.8829], [27.2077, 46.7702], [27.3282, 46.6982], [27.278, 46.6256], [27.4507, 46.4005], [27.4946, 46.1595]]]}, "properties": {"adm1": 41, "name": "Vaslui", "years": {"2001": 15, "2002": 59, "2003": 8, "2004": 43, "2005": 42, "2006": 28, "2007": 45, "2008": 29, "2009": 29, "2010": 49, "2011": 22, "2012": 54, "2013": 64, "2014": 60, "2015": 51, "2016": 106, "2017": 125, "2018": 115, "2019": 43, "2020": 88, "2021": 109, "2022": 201, "2023": 190, "2024": 148}}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[26.4414, 46.0393], [26.3934, 45.8028], [26.5315, 45.6414], [26.7496, 45.5491], [27.16, 45.4655], [27.1161, 45.4095], [27.281, 45.4547], [27.2717, 45.3904], [27.4354, 45.3947], [27.5601, 45.4886], [27.2501, 45.8729], [27.2278, 46.0029], [27.5046, 46.1397], [27.4946, 46.1595], [27.3952, 46.1946], [27.3517, 46.1532], [27.307, 46.2057], [27.1038, 46.0895], [26.4414, 46.0393]]]}, "properties": {"adm1": 42, "name": "Vrancea", "years": {"2001": 118, "2002": 412, "2003": 144, "2004": 712, "2005": 540, "2006": 274, "2007": 218, "2008": 358, "2009": 318, "2010": 429, "2011": 301, "2012": 389, "2013": 301, "2014": 416, "2015": 191, "2016": 1120, "2017": 678, "2018": 366, "2019": 265, "2020": 440, "2021": 394, "2022": 367, "2023": 479, "2024": 570}}}]};
+const YEARS = [2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024];
+const NATIONAL = {"2001": 17535, "2002": 16356, "2003": 9428, "2004": 18859, "2005": 19418, "2006": 13067, "2007": 38082, "2008": 17536, "2009": 16177, "2010": 17782, "2011": 16928, "2012": 30649, "2013": 12946, "2014": 19482, "2015": 10906, "2016": 23045, "2017": 19187, "2018": 18974, "2019": 12266, "2020": 27445, "2021": 14700, "2022": 16516, "2023": 25380, "2024": 20153, "2025": 23475};
+const DRIVERS = [["Logging", 458682], ["Unknown", 5253], ["Other natural disturbances", 3448], ["Permanent agriculture", 3317], ["Hard commodities", 2185], ["Settlements & Infrastructure", 2143], ["Wildfire", 1266]];
+const SEQ_RAMP = ["#d1e7ce", "#a4cfa0", "#77b671", "#429e3d", "#297f25", "#196116", "#0c440a"];
+const CAT_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7"];
+
+document.getElementById('hs-total').textContent = (476292).toLocaleString('en-US');
+document.getElementById('hs-logging').textContent = '96%';
+
+// ---- MAP SETUP ----
+const map = L.map('map', { preferCanvas: true }).setView([45.94, 24.97], 7);
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 18,
+}).addTo(map);
+const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Esri, Maxar, Earthstar Geographics',
+  maxZoom: 18,
+});
+
+// ---- COMPARE-IMAGERY MODE ----
+// Real Sentinel-2 photography (not modeled/colored data) via EOX's public annual
+// "Sentinel-2 cloudless" mosaics — one real image per year, 2016 onward.
+//
+// Implementation note: a naive version of this clips a Leaflet *pane* with
+// CSS clip-path — but panes are large, panned via `transform`, and don't line
+// up with the visible viewport, so a percentage clip-path on a pane clips the
+// wrong region (usually making the layer vanish entirely). The robust fix is
+// two independent Leaflet maps stacked in plain, untransformed wrapper divs:
+// `map` (the real one, draggable/zoomable — shows the "before" photo) and
+// `map2` (a second map in an overlay div, non-interactive, kept in perfect
+// sync with `map`'s center/zoom — shows the "after" photo). Because map2's
+// *wrapper div* is an ordinary block element sized to the viewport, clipping
+// that div's own box with clip-path works correctly, revealing "after" only
+// to the right of the divider while "before" (and the county outlines) show
+// through underneath everywhere else.
+const EOX_ATTR = 'Sentinel-2 cloudless by <a href="https://s2maps.eu" target="_blank">EOX IT Services GmbH</a> (Contains modified Copernicus Sentinel data), CC BY-SA 4.0';
+const CMP_YEARS = [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
+function eoxUrl(year) {
+  return `https://e.tiles.maps.eox.at/wmts/1.0.0/s2cloudless-${year}_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg`;
+}
+let cmpBeforeYear = '2018', cmpAfterYear = String(CMP_YEARS[CMP_YEARS.length - 1] - 1);
+const cmpBefore = L.tileLayer(eoxUrl(cmpBeforeYear), { maxZoom: 13, attribution: EOX_ATTR });
+
+const map2El = document.getElementById('map2');
+const map2 = L.map(map2El, {
+  attributionControl: false, zoomControl: false, dragging: false, scrollWheelZoom: false,
+  doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, touchZoom: false, fadeAnimation: false,
+});
+const cmpAfter = L.tileLayer(eoxUrl(cmpAfterYear), { maxZoom: 13, attribution: EOX_ATTR }).addTo(map2);
+function syncMap2() { map2.setView(map.getCenter(), map.getZoom(), { animate: false }); }
+map.on('move zoom', syncMap2);
+
+const beforeSelect = document.getElementById('cmp-before');
+const afterSelect = document.getElementById('cmp-after');
+CMP_YEARS.forEach(y => {
+  beforeSelect.add(new Option(y, y, false, String(y) === cmpBeforeYear));
+  afterSelect.add(new Option(y, y, false, String(y) === cmpAfterYear));
+});
+beforeSelect.onchange = () => { cmpBeforeYear = beforeSelect.value; cmpBefore.setUrl(eoxUrl(cmpBeforeYear)); };
+afterSelect.onchange = () => { cmpAfterYear = afterSelect.value; cmpAfter.setUrl(eoxUrl(cmpAfterYear)); };
+
+const divider = document.getElementById('swipe-divider');
+const labelBefore = document.getElementById('swipe-label-before');
+const labelAfter = document.getElementById('swipe-label-after');
+let dividerPct = 50;
+function applyDivider() {
+  const w = document.getElementById('map').clientWidth;
+  divider.style.left = (w * dividerPct / 100) + 'px';
+  map2El.style.clipPath = `inset(0 0 0 ${dividerPct}%)`;
+}
+function startDrag(clientX) {
+  const rect = document.getElementById('map').getBoundingClientRect();
+  const onMove = e => {
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    dividerPct = Math.min(100, Math.max(0, x / rect.width * 100));
+    applyDivider();
+  };
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    window.removeEventListener('touchmove', onMove);
+    window.removeEventListener('touchend', onUp);
+  };
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  window.addEventListener('touchmove', onMove);
+  window.addEventListener('touchend', onUp);
+}
+divider.addEventListener('mousedown', e => { e.preventDefault(); startDrag(e.clientX); });
+divider.addEventListener('touchstart', e => startDrag(e.touches[0].clientX), { passive: true });
+window.addEventListener('resize', () => { if (mode === 'compare') { map2.invalidateSize(); applyDivider(); } });
+map.on('resize', () => { if (mode === 'compare') { map2.invalidateSize(); applyDivider(); } });
+
+let mode = 'map';
+function setMode(next) {
+  mode = next;
+  [osm, sat, cmpBefore].forEach(l => map.removeLayer(l));
+  map2El.classList.toggle('visible', mode === 'compare');
+  document.getElementById('compare-panel').classList.toggle('visible', mode === 'compare');
+  divider.classList.toggle('visible', mode === 'compare');
+  labelBefore.classList.toggle('visible', mode === 'compare');
+  labelAfter.classList.toggle('visible', mode === 'compare');
+  document.getElementById('legend').style.display = mode === 'compare' ? 'none' : 'block';
+
+  if (mode === 'map') map.addLayer(osm);
+  else if (mode === 'satellite') map.addLayer(sat);
+  else if (mode === 'compare') {
+    map.addLayer(cmpBefore);
+    syncMap2();
+    map2.invalidateSize();
+    applyDivider();
+  }
+
+  document.getElementById('btn-osm').classList.toggle('active', mode === 'map');
+  document.getElementById('btn-sat').classList.toggle('active', mode === 'satellite');
+  document.getElementById('btn-cmp').classList.toggle('active', mode === 'compare');
+
+  if (geoLayer) render();
+}
+document.getElementById('btn-osm').onclick = () => setMode('map');
+document.getElementById('btn-sat').onclick = () => setMode('satellite');
+document.getElementById('btn-cmp').onclick = () => setMode('compare');
+
+// ---- COLOR SCALE ----
+function colorFor(value, maxValue) {
+  if (!value || value <= 0) return SEQ_RAMP[0];
+  const t = Math.log(value + 1) / Math.log(maxValue + 1);
+  const idx = Math.min(SEQ_RAMP.length - 1, Math.floor(t * SEQ_RAMP.length));
+  return SEQ_RAMP[idx];
+}
+
+function sumRange(yearsObj, y0, y1) {
+  let s = 0;
+  for (let y = y0; y <= y1; y++) s += (yearsObj[y] || 0);
+  return s;
+}
+
+let geoLayer = null;
+let geoLayer2 = null;
+let selectedAdm1 = null;
+const COUNTY_YEAR_MIN = Math.min(...YEARS);
+const COUNTY_YEAR_MAX = Math.max(...YEARS);
+const state = { y0: COUNTY_YEAR_MIN, y1: COUNTY_YEAR_MAX };
+
+function render() {
+  const values = COUNTIES.features.map(f => sumRange(f.properties.years, state.y0, state.y1));
+  const maxValue = Math.max(...values, 1);
+
+  document.getElementById('legend-max').textContent = Math.round(maxValue).toLocaleString('en-US') + ' ha';
+  document.getElementById('legend-ramp').innerHTML = SEQ_RAMP.map(c => `<div style="background:${c}"></div>`).join('');
+
+  const countyStyle = f => {
+    const v = sumRange(f.properties.years, state.y0, state.y1);
+    const isSel = f.properties.adm1 === selectedAdm1;
+    if (mode === 'compare') {
+      // Real imagery mode: near-invisible fill (it would hide the photo if opaque,
+      // but a fully-zero fill stops clicks registering except right on the line) —
+      // just a thin reference outline so county borders stay visible over the photo.
+      return { fillOpacity: 0.01, fillColor: '#ffffff', color: isSel ? '#ffe14d' : 'rgba(255,255,255,0.55)', weight: isSel ? 2.5 : 1 };
+    }
+    return {
+      fillColor: colorFor(v, maxValue),
+      fillOpacity: 0.82,
+      color: isSel ? '#0b0b0b' : '#ffffff',
+      weight: isSel ? 2.5 : 1,
+    };
+  };
+
+  if (geoLayer) map.removeLayer(geoLayer);
+  geoLayer = L.geoJSON(COUNTIES, {
+    style: countyStyle,
+    onEachFeature: (f, layer) => {
+      layer.on('click', () => { selectedAdm1 = f.properties.adm1; render(); showPopup(f, layer); });
+      layer.on('mouseover', () => layer.setStyle({ weight: 2.5 }));
+      layer.on('mouseout', () => { if (f.properties.adm1 !== selectedAdm1) layer.setStyle({ weight: 1 }); });
+    }
+  }).addTo(map);
+
+  // Mirror outline-only layer on map2 (the "after" compare-imagery instance), so county
+  // borders stay visible on the right side of the swipe divider too, not just the left
+  // side (which sits on the primary `map` and its `geoLayer` above). Non-interactive:
+  // map2's container has pointer-events:none, so no click handlers are needed here.
+  if (geoLayer2) map2.removeLayer(geoLayer2);
+  geoLayer2 = L.geoJSON(COUNTIES, { style: countyStyle }).addTo(map2);
+
+  renderRanking(values);
+  renderYearChart();
+}
+
+function showPopup(f, layer) {
+  const v = sumRange(f.properties.years, state.y0, state.y1);
+  const rank = rankOf(f.properties.adm1);
+  layer.bindPopup(
+    `<b>${f.properties.name}</b>` +
+    `<span class="popup-total">${Math.round(v).toLocaleString('en-US')} ha</span> lost, ${state.y0}–${state.y1}<br>` +
+    `Rank ${rank} of 42 counties<br>` +
+    `<a href="#" onclick="window.open('https://browser.dataspace.copernicus.eu/?zoom=10&lat=' + ${layer.getBounds().getCenter().lat} + '&lng=' + ${layer.getBounds().getCenter().lng}, '_blank'); return false;">↗ view real satellite imagery here</a>`
+  ).openPopup();
+}
+
+function rankOf(adm1) {
+  const totals = COUNTIES.features.map(f => ({ adm1: f.properties.adm1, v: sumRange(f.properties.years, state.y0, state.y1) }));
+  totals.sort((a, b) => b.v - a.v);
+  return totals.findIndex(t => t.adm1 === adm1) + 1;
+}
+
+function renderRanking(values) {
+  const rows = COUNTIES.features.map((f, i) => ({ name: f.properties.name, adm1: f.properties.adm1, v: values[i] }));
+  rows.sort((a, b) => b.v - a.v);
+  const top = rows.slice(0, 10);
+  const maxV = top[0] ? top[0].v : 1;
+  document.getElementById('ranking').innerHTML = top.map(r => `
+    <div class="rank-row" data-adm1="${r.adm1}">
+      <span class="rank-name">${r.name}</span>
+      <div class="rank-bar-wrap"><div class="rank-bar" style="width:${(r.v/maxV*100).toFixed(1)}%"></div></div>
+      <span class="rank-val">${Math.round(r.v).toLocaleString('en-US')}</span>
+    </div>
+  `).join('');
+  document.querySelectorAll('.rank-row').forEach(el => {
+    el.onclick = () => {
+      const adm1 = parseInt(el.dataset.adm1);
+      selectedAdm1 = adm1;
+      const feat = COUNTIES.features.find(f => f.properties.adm1 === adm1);
+      const layer = Object.values(geoLayer._layers).find(l => l.feature.properties.adm1 === adm1);
+      render();
+      if (layer) {
+        map.fitBounds(layer.getBounds(), { maxZoom: 9 });
+        showPopup(feat, layer);
+      }
+    };
+  });
+}
+
+function renderDrivers() {
+  // Percentage of total, not a magnitude bar: logging so dominates the other
+  // six causes (96%+ of all tracked loss) that a bar scaled to the largest
+  // category made every other row's bar disappear to a sliver. A share-of-
+  // total number reads correctly at any skew.
+  const total = DRIVERS.reduce((s, d) => s + d[1], 0);
+  document.getElementById('drivers').innerHTML = DRIVERS.map((d, i) => `
+    <div class="driver-row">
+      <span class="driver-chip" style="background:${CAT_COLORS[i % CAT_COLORS.length]}"></span>
+      <span class="driver-name">${d[0]}</span>
+      <span class="driver-val">${(d[1] / total * 100).toFixed(1)}%</span>
+    </div>
+  `).join('');
+}
+
+function svgLineChart(el, dataObj, y0, y1, highlightRange) {
+  const w = el.clientWidth || 280, h = 90, pad = { l: 4, r: 4, t: 8, b: 16 };
+  const yearsArr = Object.keys(dataObj).map(Number).sort((a,b)=>a-b);
+  const vals = yearsArr.map(y => dataObj[y]);
+  const maxV = Math.max(...vals, 1);
+  const x = y => pad.l + (y - yearsArr[0]) / (yearsArr[yearsArr.length-1] - yearsArr[0]) * (w - pad.l - pad.r);
+  const yFn = v => h - pad.b - (v / maxV) * (h - pad.t - pad.b);
+  let d = 'M ' + yearsArr.map(y => `${x(y)},${yFn(dataObj[y])}`).join(' L ');
+  let area = d + ` L ${x(yearsArr[yearsArr.length-1])},${h-pad.b} L ${x(yearsArr[0])},${h-pad.b} Z`;
+  let highlight = '';
+  if (highlightRange) {
+    const [hy0, hy1] = highlightRange;
+    highlight = `<rect x="${x(Math.max(hy0,yearsArr[0]))}" y="${pad.t}" width="${x(Math.min(hy1,yearsArr[yearsArr.length-1]))-x(Math.max(hy0,yearsArr[0]))}" height="${h-pad.t-pad.b}" fill="var(--seq-100)" opacity="0.5"/>`;
+  }
+  el.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  el.innerHTML = `
+    ${highlight}
+    <line class="grid" x1="${pad.l}" y1="${h-pad.b}" x2="${w-pad.r}" y2="${h-pad.b}"/>
+    <path class="area" d="${area}"/>
+    <path class="line" d="${d}"/>
+    <text class="tick" x="${pad.l}" y="${h-4}">${yearsArr[0]}</text>
+    <text class="tick" x="${w-pad.r-24}" y="${h-4}">${yearsArr[yearsArr.length-1]}</text>
+  `;
+}
+
+function renderYearChart() {
+  svgLineChart(document.getElementById('year-chart'), NATIONAL, 2001, 2025, [state.y0, state.y1]);
+  svgLineChart(document.getElementById('national-trend'), NATIONAL, 2001, 2025, [state.y0, state.y1]);
+}
+
+// ---- YEAR SLIDER (dual-handle: two inputs sharing one visual track) ----
+const minSlider = document.getElementById('year-min');
+const maxSlider = document.getElementById('year-max');
+const yearLabel = document.getElementById('year-label');
+const rangeFill = document.getElementById('range-fill');
+document.getElementById('range-end-lo').textContent = COUNTY_YEAR_MIN;
+document.getElementById('range-end-hi').textContent = COUNTY_YEAR_MAX;
+minSlider.min = maxSlider.min = COUNTY_YEAR_MIN;
+minSlider.max = maxSlider.max = COUNTY_YEAR_MAX;
+minSlider.value = COUNTY_YEAR_MIN;
+maxSlider.value = COUNTY_YEAR_MAX;
+
+function updateYears() {
+  // Clamp instead of letting the handles cross — the "from" handle can never
+  // pass the "to" handle, so they can't swap roles and confuse which is which.
+  let y0 = parseInt(minSlider.value), y1 = parseInt(maxSlider.value);
+  if (y0 > y1) {
+    if (document.activeElement === minSlider) { y1 = y0; maxSlider.value = y1; }
+    else { y0 = y1; minSlider.value = y0; }
+  }
+  state.y0 = y0; state.y1 = y1;
+  yearLabel.textContent = `${y0} – ${y1}`;
+
+  const span = COUNTY_YEAR_MAX - COUNTY_YEAR_MIN || 1;
+  const pctLo = (y0 - COUNTY_YEAR_MIN) / span * 100;
+  const pctHi = (y1 - COUNTY_YEAR_MIN) / span * 100;
+  rangeFill.style.left = pctLo + '%';
+  rangeFill.style.width = (pctHi - pctLo) + '%';
+
+  render();
+}
+minSlider.addEventListener('input', updateYears);
+maxSlider.addEventListener('input', updateYears);
+updateYears();
+
+// ---- EXTERNAL LINKS ----
+document.getElementById('link-eobrowser').href = 'https://browser.dataspace.copernicus.eu/?zoom=7&lat=45.94&lng=24.97';
+document.getElementById('link-gfw').href = 'https://globalnaturewatch.org/map/country/ROU/';
+
+// ---- INIT ----
+renderDrivers();
+setMode('map');
+render();
+</script>
+</body>
+</html>
