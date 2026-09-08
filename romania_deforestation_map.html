@@ -490,7 +490,7 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
 
 // ---- COMPARE-IMAGERY MODE ----
 // Real Sentinel-2 photography (not modeled/colored data) via EOX's public annual
-// "Sentinel-2 cloudless" mosaics — one real image per year, 2016 onward.
+// "Sentinel-2 cloudless" mosaics — one real image per year, 2018 onward.
 //
 // Implementation note: a naive version of this clips a Leaflet *pane* with
 // CSS clip-path — but panes are large, panned via `transform`, and don't line
@@ -505,7 +505,7 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
 // to the right of the divider while "before" (and the county outlines) show
 // through underneath everywhere else.
 const EOX_ATTR = 'Sentinel-2 cloudless by <a href="https://s2maps.eu" target="_blank">EOX IT Services GmbH</a> (Contains modified Copernicus Sentinel data), CC BY-SA 4.0';
-const CMP_YEARS = [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
+const CMP_YEARS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 function eoxUrl(year) {
   return `https://e.tiles.maps.eox.at/wmts/1.0.0/s2cloudless-${year}_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg`;
 }
