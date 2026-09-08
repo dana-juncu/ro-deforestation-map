@@ -12,7 +12,7 @@ lets you see the actual satellite imagery, not just the data.
 - **Choropleth by județ** — total tree cover lost, color-coded, for any year range you
   pick with the slider (2001–2024)
 - **Three view modes** — street map, satellite basemap, and **Compare imagery**: real
-  Sentinel-2 photos with a drag-to-reveal before/after divider (2016–2025), so you can
+  Sentinel-2 photos with a drag-to-reveal before/after divider (2018–2025), so you can
   see forest actually disappear between two chosen years, not just a colored overlay
 - **County ranking** — top 10 counties by loss in the selected range, click-through to
   a year-by-year popup for any county
@@ -35,7 +35,7 @@ if the source data is ever refreshed.
   national tree cover loss by year, plus loss-driver classification (WRI/Google), via
   their public data API.
 - **GADM v3.6** — county (admin-1) boundaries.
-- **EOX IT Services GmbH** — Sentinel-2 cloudless annual mosaics, 2016–2025, the real
+- **EOX IT Services GmbH** — Sentinel-2 cloudless annual mosaics, 2018–2025, the real
   satellite photography behind Compare-imagery mode. CC BY-SA 4.0.
 
 ## Data files
@@ -61,6 +61,9 @@ if the source data is ever refreshed.
   none occurred.
 - 2025 is included in the national trend chart but not yet broken out by county —
   2024 is the latest year with a full per-county breakdown in the source data.
+- Compare-imagery mode's year picker starts at 2018, not 2016 — EOX's 2016/2017
+  mosaics returned blank tiles when tested, so those two years were dropped from
+  the picker rather than left in as a broken option.
 
 ## License
 
