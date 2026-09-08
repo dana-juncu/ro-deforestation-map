@@ -175,8 +175,10 @@ body {
   padding: 16px 18px; width: 310px; max-height: calc(100% - 24px);
   overflow-y: auto; border: 1px solid var(--border);
 }
+#header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 #header h1 { font-size: 18px; font-weight: 700; }
 #header .sub { font-size: 14px; color: var(--text-secondary); margin-top: 4px; line-height: 1.4; }
+#header-toggle { display: none; }
 .hstat { display: flex; align-items: baseline; gap: 7px; margin-top: 11px; }
 .hstat .v { font-size: 27px; font-weight: 800; color: var(--seq-600); line-height: 1; }
 .hstat .l { font-size: 13px; color: var(--text-secondary); line-height: 1.3; }
@@ -304,8 +306,10 @@ body {
 #sidebar {
   width: 340px; flex-shrink: 0; background: var(--surface-1);
   border-left: 1px solid var(--gridline); overflow-y: auto;
-  padding: 20px 18px; display: flex; flex-direction: column; gap: 20px;
+  display: flex; flex-direction: column;
 }
+#sidebar-handle { display: none; }
+#sidebar-content { padding: 20px 18px; display: flex; flex-direction: column; gap: 20px; }
 .sec-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 9px; }
 .sec-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 11px; }
 
@@ -344,26 +348,62 @@ body {
 
 @media (max-width: 900px) {
   body { flex-direction: column; }
-  #sidebar { width: 100%; max-height: 34dvh; order: 2; }
-  #map-container { order: 1; min-height: 60dvh; }
+
+  /* The map itself is the point, so on a phone it gets whatever height
+     isn't claimed by the (now collapsible) header and sidebar drawer,
+     instead of a fixed 60dvh split that left almost no room to pan/zoom
+     once the floating header and bottom panels were subtracted from it. */
+  #map-container { order: 1; flex: 1; min-height: 0; }
+
+  /* Sidebar becomes a bottom drawer: collapsed to just its handle by
+     default (map gets the space), expandable by tapping the handle.
+     It's a normal flex sibling of map-container (not an overlay), so
+     expanding it shrinks map-container's flex:1 height directly — the
+     map.invalidateSize() call after the transition (see script) is what
+     makes Leaflet notice. */
+  #sidebar {
+    width: 100%; order: 2; flex-shrink: 0;
+    max-height: 48px; overflow: hidden;
+    transition: max-height 0.28s ease;
+  }
+  #sidebar.expanded { max-height: 52dvh; overflow-y: auto; }
+  #sidebar-handle {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 16px; font-size: 13px; font-weight: 700; color: var(--text-primary);
+    cursor: pointer; flex-shrink: 0; background: var(--surface-1);
+    border-bottom: 1px solid var(--gridline);
+  }
+  #sidebar-handle .chev { font-size: 11px; color: var(--text-muted); transition: transform 0.28s ease; display: inline-block; }
+  #sidebar.expanded #sidebar-handle .chev { transform: rotate(180deg); }
+  #sidebar-content { padding: 14px 16px; }
 
   /* Header + mode toggle stack vertically as full-width rows instead of
      sitting side by side (on a phone-width screen they collided: the
      toggle's three buttons overlapped the header's title/stats). The
-     header itself is condensed — the long description drops and the two
-     headline stats sit side by side instead of stacked — so the whole
-     top group stays short enough to leave real room for the map. */
+     header is collapsed to just its title by default — tapping the
+     chevron reveals the two headline stats — since those are reference
+     detail, not something that needs to permanently cover the map. */
   #top-overlay {
     display: flex; flex-direction: column; gap: 8px;
     position: absolute; top: 10px; left: 10px; right: 10px; z-index: 1000;
   }
   #header {
     position: static; width: 100%; max-height: none;
-    padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 18px;
+    padding: 10px 14px;
   }
-  #header h1 { flex: 1 0 100%; font-size: 16px; }
+  #header-row { width: 100%; }
+  #header h1 { font-size: 16px; }
   #header .sub { display: none; }
-  .hstat { margin-top: 4px; }
+  #header-toggle {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--page-plane); color: var(--text-secondary); font-size: 11px; cursor: pointer;
+    transition: transform 0.25s ease;
+  }
+  #header.expanded #header-toggle { transform: rotate(180deg); }
+  #header .hstat { display: none; }
+  #header.expanded .hstat { display: flex; }
+  .hstat { margin-top: 8px; }
   .hstat .v { font-size: 21px; }
   .hstat .l { font-size: 11px; }
   #mode-row { position: static; width: 100%; }
@@ -406,7 +446,10 @@ body {
 
   <div id="top-overlay">
     <div id="header">
-      <h1 data-i18n="title">🌲 Harta Defrișărilor din România</h1>
+      <div id="header-row">
+        <h1 data-i18n="title">🌲 Harta Defrișărilor din România</h1>
+        <button type="button" id="header-toggle" aria-label="Arată/ascunde statisticile">▾</button>
+      </div>
       <div class="sub" data-i18n="subtitle">Pierdere de pădure pe județ, 2001–2024 · date Hansen/UMD/Google/USGS/NASA via Global Nature Watch</div>
       <div class="hstat"><span class="v" id="hs-total"></span><span class="l" data-i18n="hstat_total">hectare de pădure pierdute<br>la nivel național, 2001–2025</span></div>
       <div class="hstat"><span class="v" id="hs-logging"></span><span class="l" data-i18n="hstat_logging">din toată pierderea urmărită este<br>atribuită exploatării forestiere</span></div>
@@ -467,6 +510,11 @@ body {
 </div>
 
 <div id="sidebar">
+  <div id="sidebar-handle">
+    <span data-i18n="sidebar_handle">Vezi clasamentul, cauzele și tendința</span>
+    <span class="chev">▾</span>
+  </div>
+  <div id="sidebar-content">
   <div>
     <div class="sec-label" data-i18n="sec_ranking_label">Cea mai mare pierdere cumulată</div>
     <div class="sec-sub" data-i18n="sec_ranking_sub">Județe clasate după pădurea pierdută în intervalul de ani selectat. Apasă pe o bară sau pe un județ de pe hartă pentru detalii anuale.</div>
@@ -498,6 +546,7 @@ body {
     Clasificarea factorilor de pierdere: WRI/Google. Granițe județene: GADM v3.6.
     Fotografii Compară imagini: mozaicuri anuale Sentinel-2 cloudless de <a href="https://s2maps.eu" target="_blank">EOX IT Services GmbH</a>, conțin date Copernicus Sentinel modificate, CC BY-SA 4.0.
     Date preluate la 20.08.2026 — GNW actualizează anual; cifrele se pot modifica ușor.
+  </div>
   </div>
 </div>
 
@@ -531,6 +580,7 @@ const translations = {
     swipe_before: 'ÎNAINTE',
     swipe_after: 'DUPĂ',
     label_years: 'Ani',
+    sidebar_handle: 'Vezi clasamentul, cauzele și tendința',
     sec_ranking_label: 'Cea mai mare pierdere cumulată',
     sec_ranking_sub: 'Județe clasate după pădurea pierdută în intervalul de ani selectat. Apasă pe o bară sau pe un județ de pe hartă pentru detalii anuale.',
     sec_drivers_label: 'De ce dispare pădurea',
@@ -567,6 +617,7 @@ const translations = {
     swipe_before: 'BEFORE',
     swipe_after: 'AFTER',
     label_years: 'Years',
+    sidebar_handle: 'See the ranking, causes, and trend',
     sec_ranking_label: 'Highest cumulative loss',
     sec_ranking_sub: 'Counties ranked by tree cover lost in the selected year range. Click a bar or a county on the map for its yearly detail.',
     sec_drivers_label: 'Why the forest is disappearing',
@@ -927,6 +978,34 @@ document.querySelectorAll('.lang-btn').forEach(btn => {
     render();
   });
 });
+
+// ---- MOBILE: COLLAPSIBLE HEADER + SIDEBAR DRAWER ----
+// On phones the map itself is the point, so the header's stats and the
+// sidebar's ranking/drivers/trend start collapsed to reclaim vertical space
+// for panning/zooming, and expand on tap. The header doesn't affect
+// map-container's box size (it's an absolute overlay), so toggling it needs
+// no map resize; the sidebar drawer DOES change map-container's flex height,
+// so Leaflet needs an explicit invalidateSize() once the CSS transition
+// finishes, or it keeps rendering tiles for the old (larger or smaller) box.
+const headerToggle = document.getElementById('header-toggle');
+const headerEl = document.getElementById('header');
+if (headerToggle) {
+  headerToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    headerEl.classList.toggle('expanded');
+  });
+}
+const sidebarHandle = document.getElementById('sidebar-handle');
+const sidebarEl = document.getElementById('sidebar');
+if (sidebarHandle) {
+  sidebarHandle.addEventListener('click', () => {
+    sidebarEl.classList.toggle('expanded');
+    setTimeout(() => {
+      map.invalidateSize();
+      if (mode === 'compare') { map2.invalidateSize(); applyDivider(); }
+    }, 300);
+  });
+}
 
 // ---- INIT ----
 applyStaticTranslations();
