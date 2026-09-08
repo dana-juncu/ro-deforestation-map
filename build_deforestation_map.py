@@ -112,7 +112,13 @@ def main():
     html = html.replace("__TOTAL_NATIONAL__", str(total_national))
     html = html.replace("__RECENT5__", str(recent5))
     html = html.replace("__LOGGING_SHARE__", f"{logging_share:.0f}")
-    html = html.replace("__YEARS_RANGE_2016_2025__", json.dumps(list(range(2016, 2026))))
+    # EOX's s2cloudless mosaic doesn't have usable global tiles for 2016/2017
+    # (2016 was a one-off original release under a different, non-annual layer
+    # name; annual "-YYYY_3857" layers are reliably populated from 2018 on) —
+    # confirmed by real blank/grey tiles when those years were selected, so
+    # they're excluded from the picker entirely rather than just avoided as
+    # the default.
+    html = html.replace("__YEARS_RANGE_2016_2025__", json.dumps(list(range(2018, 2026))))
 
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(html)
@@ -611,7 +617,7 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
 
 // ---- COMPARE-IMAGERY MODE ----
 // Real Sentinel-2 photography (not modeled/colored data) via EOX's public annual
-// "Sentinel-2 cloudless" mosaics — one real image per year, 2016 onward.
+// "Sentinel-2 cloudless" mosaics — one real image per year, 2018 onward.
 //
 // Implementation note: a naive version of this clips a Leaflet *pane* with
 // CSS clip-path — but panes are large, panned via `transform`, and don't line
